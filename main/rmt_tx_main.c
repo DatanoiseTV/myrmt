@@ -93,15 +93,34 @@ Jitter due to repetition 0.7937%
 */
 
 
+/* ************************************************************************* */
+/*                         INCLUDE HEADER SECTION                            */
+/* ************************************************************************* */
+
+// -------------------
+// C standard includes
+// -------------------
 
 #include <math.h>
+#include <stdio.h>
 
+// -----------------------------------
+// Expressif SDK-IDF standard includes
+// -----------------------------------
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "driver/rmt.h"
 
+
+// --------------
+// Local includes
+// --------------
+
+/* ************************************************************************* */
+/*                      DEFINES AND ENUMERATIONS SECTION                     */
+/* ************************************************************************* */
 
 #define RMT_TX_CHANNEL RMT_CHANNEL_0
 #define RMT_TX_GPIO 18
@@ -137,6 +156,10 @@ typedef struct {
 
 
 
+/* ************************************************************************* */
+/*                          GLOBAL VARIABLES SECTION                         */
+/* ************************************************************************* */
+
 static const char *RMT_TX_TAG = "RMT Tx";
 
 
@@ -155,12 +178,20 @@ rmt_item32_t items[] = {
 };
 
 
-static rmt_item32_t* items_alloc(uint16_t nitems)
+/* ************************************************************************* */
+/*                        AUXILIAR FUNCTIONS SECTION                         */
+/* ************************************************************************* */
+
+static 
+rmt_item32_t* freq_items_alloc(uint16_t nitems)
 {
     return (rmt_item32_t*) calloc(nitems, sizeof(rmt_item32_t));
 }
 
-static uint32_t split(const double fout, uint8_t* prescaler)
+/* -------------------------------------------------------------------------- */
+
+static 
+uint32_t freq_split(const double fout, uint8_t* prescaler)
 {
 
     double whole; 
@@ -195,8 +226,10 @@ static uint32_t split(const double fout, uint8_t* prescaler)
     return (uint32_t)(N);
 }
 
+/* -------------------------------------------------------------------------- */
 
-static uint16_t count_items(uint32_t NH, uint32_t NL)
+static 
+uint16_t freq_count_items(uint32_t NH, uint32_t NL)
 {
     uint16_t count = 0;
 
@@ -236,15 +269,18 @@ static uint16_t count_items(uint32_t NH, uint32_t NL)
         count += 1;
     }
 
-    count += 1;     // End of transmission item
+    // The count includes a final EoTx item
+    count += 1;     
     return count;
 }
+
+/* -------------------------------------------------------------------------- */
 
 // Fills an array of items
 // Give an updated pointer so that we can mark the end of transmission
 // or concatenate more items
 // NO EoTX value is written, must be written outside
-static rmt_item32_t* items_fill(rmt_item32_t* item, uint32_t NH, uint32_t NL)
+static rmt_item32_t* freq_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t NL)
 {
 
     // Quick way out
@@ -299,15 +335,21 @@ static rmt_item32_t* items_fill(rmt_item32_t* item, uint32_t NH, uint32_t NL)
     }
     return item;
 }
+
+/* -------------------------------------------------------------------------- */
    
-static void print_items(rmt_item32_t* p, uint32_t N)
+static 
+void freq_print_items(const rmt_item32_t* p, uint32_t N)
 {
     for (int i=0; i<N; i++) {
         printf("(%d,%d,%d,%d)\t", p[i].duration0, p[i].level0, p[i].duration1, p[i].level1);
     }
 }
 
-static esp_err_t calc_freq_params(freq_params_t* fp, double Fout, double Dcyc)
+/* -------------------------------------------------------------------------- */
+
+static 
+esp_err_t freq_calc_params(freq_params_t* fp, double Fout, double Dcyc)
 {
 
     double Tclk, dNhigh, dNlow;
@@ -320,7 +362,7 @@ static esp_err_t calc_freq_params(freq_params_t* fp, double Fout, double Dcyc)
 
     // Decompose Frequency into the product of 2 factors: prescaler and Ntot
     // Decompose the duty cycle into and Nhigh and Nlow numbers
-    Ntot = split(Fout, &Prescaler);
+    Ntot = freq_split(Fout, &Prescaler);
     Tclk = (double) Prescaler / FREQ_APB;
 
     dNhigh = Ntot * Dcyc;       // still floating point
@@ -337,25 +379,26 @@ static esp_err_t calc_freq_params(freq_params_t* fp, double Fout, double Dcyc)
     Fout2 = FREQ_APB / (Prescaler * (double)(Ntot));
     Dcyc2 = Nhigh    / (double)(Ntot);
     ErrFreq = (Fout2 - Fout)/Fout;
-    ErrDcyc  = (Dcyc2 - Dcyc)/Dcyc;
+    ErrDcyc  = (Dcyc2 - Dcyc)/Dcyc; 
 
-    ESP_LOGI(FREQ_TAG, "Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FREQ_APB, Prescaler, 1/Tclk);    
     FREQ_CHECK(dNhigh >=1.0, "High state count is < 1", ESP_ERR_INVALID_SIZE);
     FREQ_CHECK(dNlow >=1.0,  "Low state count is < 1",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FREQ_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", Ntot, Nhigh, Nlow);
-    ESP_LOGI(FREQ_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, Fout2, ErrFreq*100, Dcyc*100, Dcyc2*100, ErrDcyc*100);
-
+ 
     // See how many RMT 32-bit items needs this frequency generation
     // How many channes does it take and how many repetitions withon a channel
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
-    Nitems = count_items(Nhigh, Nlow);
+    Nitems = freq_count_items(Nhigh, Nlow);
     Nchan = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
     Nrep = Nchan * 63 / (Nitems-1);
     jitter = 1/((double)(Ntot) * Nrep);
 
-    ESP_LOGI(FREQ_TAG,"Nitems = %d, NChannels = %d", Nitems, Nchan);
     FREQ_CHECK(Nchan <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
+   
+    ESP_LOGI(FREQ_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FREQ_APB, Prescaler, 1/Tclk);    
+    ESP_LOGI(FREQ_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", Ntot, Nhigh, Nlow);
+    ESP_LOGI(FREQ_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, Fout2, ErrFreq*100, Dcyc*100, Dcyc2*100, ErrDcyc*100);
+    ESP_LOGI(FREQ_TAG,"Nitems = %d, NChannels = %d", Nitems, Nchan);
     ESP_LOGI(FREQ_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",Nrep);
     ESP_LOGI(FREQ_TAG,"Jitter due to repetition %.02f%%",jitter*100);
 
@@ -364,19 +407,21 @@ static esp_err_t calc_freq_params(freq_params_t* fp, double Fout, double Dcyc)
     fp->prescaler  = Prescaler;
     fp->mem_blocks = Nchan;
     fp->nitems     = (Nitems - 1)*Nrep + 1; // include final EoTx
-    fp->items      = items_alloc(fp->nitems);
+    fp->items      = freq_items_alloc(fp->nitems);
+    FREQ_CHECK(fp->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
     rmt_item32_t* p = fp->items;
     for(int i = 0 ; i<Nrep; i++) {
-        p = items_fill(p, Nhigh, Nlow);
+        p = freq_fill_items(p, Nhigh, Nlow);
     }
     p->val = 0; // mark end of sequence
 
-    print_items(fp->items, fp->nitems);
+    freq_print_items(fp->items, fp->nitems);
 
     return ESP_OK;
 }
 
 
+/* -------------------------------------------------------------------------- */
 
 /*
  * Initialize the RMT Tx channel
@@ -384,7 +429,7 @@ static esp_err_t calc_freq_params(freq_params_t* fp, double Fout, double Dcyc)
 static void rmt_tx_int()
 {
    
-#if 1
+#if 0
     rmt_config_t config = {
         // Common config
         .channel              = RMT_TX_CHANNEL,
@@ -403,7 +448,7 @@ static void rmt_tx_int()
 #else
     freq_params_t fparams;
 
-    calc_freq_params(&fparams, 5, 0.5);
+    freq_calc_params(&fparams, 5, 0.5);
 
     rmt_config_t config = {
         // Common config
@@ -429,30 +474,35 @@ static void rmt_tx_int()
 
 
 #if 0
-    calc_freq_params(0.01,    0.75);
-    calc_freq_params(0.01,    0.5);
-    calc_freq_params(0.02,    0.5);
-    calc_freq_params(0.02,    0.1);
-    calc_freq_params(0.025,   0.5);
-    calc_freq_params(0.05,    0.75);
-    calc_freq_params(0.05,    0.5);
-    calc_freq_params(0.1,     0.5);
-    calc_freq_params(0.1,     0.63);
-    calc_freq_params(0.1,     0.005);
-    calc_freq_params(0.1,     1-0.005);
-    calc_freq_params(5,       0.5);
-    calc_freq_params(5,       1-0.005);
-    calc_freq_params(5,       0.5);
-    calc_freq_params(509,     0.5);
-    calc_freq_params(6473,    0.5);
-    calc_freq_params(43247,   0.7);
-    calc_freq_params(50000,   0.7);
-    calc_freq_params(70729.0,  0.5);
-    calc_freq_params(100000.0, 0.5);
-    calc_freq_params(500000.0, 0.5);
+    freq_calc_params(0.01,    0.75);
+    freq_calc_params(0.01,    0.5);
+    freq_calc_params(0.02,    0.5);
+    freq_calc_params(0.02,    0.1);
+    freq_calc_params(0.025,   0.5);
+    freq_calc_params(0.05,    0.75);
+    freq_calc_params(0.05,    0.5);
+    freq_calc_params(0.1,     0.5);
+    freq_calc_params(0.1,     0.63);
+    freq_calc_params(0.1,     0.005);
+    freq_calc_params(0.1,     1-0.005);
+    freq_calc_params(5,       0.5);
+    freq_calc_params(5,       1-0.005);
+    freq_calc_params(5,       0.5);
+    freq_calc_params(509,     0.5);
+    freq_calc_params(6473,    0.5);
+    freq_calc_params(43247,   0.7);
+    freq_calc_params(50000,   0.7);
+    freq_calc_params(70729.0,  0.5);
+    freq_calc_params(100000.0, 0.5);
+    freq_calc_params(500000.0, 0.5);
 #endif
 
 }
+
+
+/* ************************************************************************* */
+/*                             MAIN ENTRY POINT                              */
+/* ************************************************************************* */
 
 void app_main(void *ignore)
 {

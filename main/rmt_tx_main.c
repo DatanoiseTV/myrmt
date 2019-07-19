@@ -190,40 +190,47 @@ rmt_item32_t* freq_items_alloc(uint16_t nitems)
 
 /* -------------------------------------------------------------------------- */
 
+// Find two divisors N and Prescaler so that
+// FREQ_APB = Fout * (Prescaler * N)
+// being Prescaler and N both integers
+
+typedef struct {
+    uint32_t N;         // Big number to decompose in items
+    uint8_t  prescaler; // RMT prescaler
+} freq_divisors_t;
+
 static 
-uint32_t freq_split(const double fout, uint8_t* prescaler)
+void freq_find_divisors(const double fout, freq_divisors_t* divisors)
 {
 
     double whole; 
     double N, new_N;
     double err, new_err;
 
-    *prescaler = 255;   // Assume highest prescaler
+    divisors->prescaler = 255;   // Assume highest prescaler
 
     whole = round(FREQ_APB/fout);
-    N     = whole / *prescaler;
-    err   = fmod(whole, *prescaler);
+    divisors->N     = whole / divisors->prescaler;
+    err   = fmod(whole,  divisors->prescaler);
 
-    while (*prescaler > 1) {
-        new_N     = whole / *prescaler;
-        new_err   = fmod(whole, *prescaler);
+    while (divisors->prescaler > 1) {
+        new_N     = whole / divisors->prescaler;
+        new_err   = fmod(whole, divisors->prescaler);
         if (new_err == 0.0 && new_N > 1.0) {
             err = new_err;
-            N   = new_N;
+            divisors->N   = new_N;
             break;
         } else if (new_err < err) {
             err = new_err;
-            N   = new_N;
+            divisors->N   = new_N;
         }
-        *prescaler -= 1; 
+        divisors->prescaler -= 1; 
     }
 
-    if (*prescaler == 2 && err != 0.0) {
-        *prescaler = 1;
-        N = whole;
+    if (divisors->prescaler == 2 && err != 0.0) {
+        divisors->prescaler = 1;
+        divisors->N = whole;
     }
-      
-    return (uint32_t)(N);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -362,7 +369,7 @@ esp_err_t freq_calc_params(freq_params_t* fp, double Fout, double Dcyc)
 
     // Decompose Frequency into the product of 2 factors: prescaler and Ntot
     // Decompose the duty cycle into and Nhigh and Nlow numbers
-    Ntot = freq_split(Fout, &Prescaler);
+    Ntot = freq_find_divisors(Fout, &Prescaler);
     Tclk = (double) Prescaler / FREQ_APB;
 
     dNhigh = Ntot * Dcyc;       // still floating point
@@ -429,7 +436,7 @@ esp_err_t freq_calc_params(freq_params_t* fp, double Fout, double Dcyc)
 static void rmt_tx_int()
 {
    
-#if 0
+#if 1
     rmt_config_t config = {
         // Common config
         .channel              = RMT_TX_CHANNEL,
@@ -519,7 +526,12 @@ void app_main(void *ignore)
 #else
     ESP_LOGI(RMT_TX_TAG, "Configuring transmitter");
     rmt_tx_int();
+    int number_of_items = sizeof(items) / sizeof(items[0]);
+    ESP_LOGI(RMT_TX_TAG, "Number of items = %d",number_of_items);
+    //ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, items, number_of_items, false));
+    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items, number_of_items, 0));
     ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, true));
+
 #endif    
 
     while (1) {

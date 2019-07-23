@@ -154,6 +154,7 @@ typedef struct {
     double        duty_cycle; // duty cycle after adjustments (0 < x < 1)
     rmt_item32_t* items;      // Array of RMT items including EoTx
     size_t        nitems;     // number of RMT items in the array, including EoTx
+    uint8_t       nrep;       // how many times the items sequence is repeated (1 < nrep)
     uint8_t       mem_blocks; // number of memory blocks consumed (1 block = 64 RMT items)
     uint8_t       prescaler;  // RMT prescaler value
     uint32_t      N;          // Big divisor to decompose in items (internal value)
@@ -185,7 +186,7 @@ rmt_item32_t* fgen_alloc_items(size_t nitems)
 // being Prescaler and N both integers
 
 static 
-esp_err_t fgen_find_fgen(double fout, double duty_cycle, fgen_params_t* fgen)
+esp_err_t fgen_find_freq(double fout, double duty_cycle, fgen_params_t* fgen)
 {
 
     double whole; 
@@ -383,38 +384,37 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 /* -------------------------------------------------------------------------- */
 
 static 
-void fgen_log_params(double Fout, double Dcyc, fgen_params_t* fgen)
+void fgen_log_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 {
-    double Tclk, ErrFreq, ErrDcyc;
+    double Tclk, ErrFreq, Errduty_cycle;
 
     // Recompute the Fout frequency with all that rounding taking place
     // and check the relative  error
     fgen->freq       = FGEN_APB / (fgen->prescaler * (double)(fgen->N));
     fgen->duty_cycle = fgen->NH / (double)(fgen->N);
-    ErrFreq = (fgen->freq - Fout)/Fout;
-    ErrDcyc = (fgen->duty_cycle - Dcyc)/Dcyc; 
-    Tclk    = (double) fgen->prescaler / FGEN_APB;
+    ErrFreq          = (fgen->freq - Fout)/Fout;
+    Errduty_cycle    = (fgen->duty_cycle - duty_cycle)/duty_cycle; 
+    Tclk             = (double) fgen->prescaler / FGEN_APB;
 
     ESP_LOGI(FGEN_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FGEN_APB, fgen->prescaler, 1/Tclk);    
     ESP_LOGI(FGEN_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", fgen->N, fgen->NH, fgen->NL);
-    ESP_LOGI(FGEN_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, fgen->freq, ErrFreq*100, Dcyc*100, fgen->duty_cycle*100, ErrDcyc*100);
+    ESP_LOGI(FGEN_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, fgen->freq, ErrFreq*100, duty_cycle*100, fgen->duty_cycle*100, Errduty_cycle*100);
 }
 
 /* -------------------------------------------------------------------------- */
 
 static 
-esp_err_t fgen_calc_params(double Fout, double Dcyc, fgen_params_t* fgen)
+esp_err_t fgen_calc_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 {
 
     double jitter;
 
     uint16_t Nitems;
-    uint8_t  Nrep;
 
     // Decompose Frequency into the product of 2 factors: prescaler and N
     // Decompose N into NH and NL taking into account dyty cycle
-    fgen_find_fgen(Fout, Dcyc, fgen);
-    fgen_log_params(Fout, Dcyc, fgen);
+    fgen_find_freq(Fout, duty_cycle, fgen);
+    fgen_log_params(Fout, duty_cycle, fgen);
  
     // See how many RMT 32-bit items needs this frequency generation
     // How many channes does it take and how many repetitions withon a channel
@@ -422,19 +422,21 @@ esp_err_t fgen_calc_params(double Fout, double Dcyc, fgen_params_t* fgen)
 
     Nitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
     fgen->mem_blocks = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
-    Nrep   = (fgen->mem_blocks * 63) / Nitems;
-    jitter = 1/((double)(fgen->N) * Nrep);
+    fgen->nrep       = (fgen->mem_blocks * 63) / Nitems;
+    jitter = 1/((double)(fgen->N) * fgen->nrep);
 
     FGEN_CHECK(fgen->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
     ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", Nitems, fgen->mem_blocks);
-    ESP_LOGI(FGEN_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",Nrep);
+    ESP_LOGI(FGEN_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",fgen->nrep);
     ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
-    fgen->nitems     = Nitems * Nrep + 1; // include final EoTx
+    fgen->nitems     = Nitems * fgen->nrep + 1; // global array size including final EoTx
     fgen->items      = fgen_alloc_items(fgen->nitems);
     FGEN_CHECK(fgen->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
+
+    // Generate the pattern and repeat it as much as we can within a 64 -item block
     rmt_item32_t* p = fgen->items;
-    for(int i = 0 ; i<Nrep; i++) {
+    for(int i = 0 ; i<fgen->nrep; i++) {
         p = fgen_fill_items(p, fgen->NH, fgen->NL);
     }
     p->val = 0; // mark end of sequence
@@ -487,7 +489,7 @@ void app_main(void *ignore)
     fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04);
     fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1);
     fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0);
-    fgen_init(RMT_CHANNEL_6, GPIO_21, 4.0);
+    fgen_init(RMT_CHANNEL_6, GPIO_21, 50012);
 
     ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_0, true));
     ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_2, true));

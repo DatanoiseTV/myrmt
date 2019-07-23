@@ -419,7 +419,7 @@ esp_err_t fgen_calc_params(double Fout, double Dcyc, fgen_params_t* fgen)
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
     Nitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
-    fgen->mem_blocks  = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
+    fgen->mem_blocks = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
     Nrep   = (fgen->mem_blocks * 63) / Nitems;
     jitter = 1/((double)(fgen->N) * Nrep);
 
@@ -482,7 +482,7 @@ void app_main(void *ignore)
     int i = 1;
 
     ESP_LOGI(FGEN_TAG, "Configuring transmitter");
-    fgen_init(RMT_CHANNEL_0, 18, 0.250);
+    fgen_init(RMT_CHANNEL_0, 18, 5.0);
     ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_0, true));
 
     while (1) {

@@ -121,8 +121,10 @@ Jitter due to repetition 0.7937%
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
 /* ************************************************************************* */
 
-#define RMT_TX_CHANNEL RMT_CHANNEL_0
-#define RMT_TX_GPIO 18
+#define GPIO_5   5
+#define GPIO_18 18
+#define GPIO_19 19
+#define GPIO_21 21
 
 #define NO_RX_BUFFER 0
 #define DEFAULT_ALLOC_FLAGS 0
@@ -482,8 +484,15 @@ void app_main(void *ignore)
     int i = 1;
 
     ESP_LOGI(FGEN_TAG, "Configuring transmitter");
-    fgen_init(RMT_CHANNEL_0, 18, 5.0);
+    fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04);
+    fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1);
+    fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0);
+    fgen_init(RMT_CHANNEL_6, GPIO_21, 4.0);
+
     ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_0, true));
+    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_2, true));
+    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_4, true));
+    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_6, true));
 
     while (1) {
         ESP_LOGI(FGEN_TAG, "Forever loop (%d)", i++);

@@ -151,7 +151,10 @@ typedef struct {
     rmt_item32_t* items;      // Array of items including EoTx
     uint16_t      nitems;     // number of RMT items in the array, including EoTx
     uint8_t       mem_blocks; // number of 64 item memory blocks consumed
-    uint8_t       prescaler;  // prescaler value
+    uint8_t       prescaler;  // RMT prescaler value
+    uint32_t      N;          // Big number to decompose in items (internal value)
+    uint32_t      NH;         // The high level part of N (N = NH + NL)
+    uint32_t      NL;         // The low level part of N  (N = NH + NL)
 } freq_params_t;
 
 
@@ -163,16 +166,83 @@ typedef struct {
 static const char *RMT_TX_TAG = "RMT Tx";
 
 
-rmt_item32_t items[] = {
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
-    {{{ 2, 1, 2, 0 }}},
+rmt_item32_t items_kk[] = {
+// 1
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+// 2
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+// 3
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+// 4
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+
+// 5
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+
+// 6
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+
+// 7
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+
+// 8
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+    {{{ 32000, 1, 32000, 0 }}},
+
+    
     // RMT end marker
     {{{ 0, 0, 0, 0 }}}
 };
@@ -194,18 +264,14 @@ rmt_item32_t* freq_items_alloc(uint16_t nitems)
 // FREQ_APB = Fout * (Prescaler * N)
 // being Prescaler and N both integers
 
-typedef struct {
-    uint32_t N;         // Big number to decompose in items
-    uint8_t  prescaler; // RMT prescaler
-} freq_divisors_t;
-
 static 
-void freq_find_divisors(const double fout, freq_divisors_t* divisors)
+esp_err_t freq_find_divisors(double fout, double duty_cycle, freq_params_t* divisors)
 {
 
     double whole; 
-    double N, new_N;
+    double new_N;
     double err, new_err;
+    double dNhigh, dNlow;
 
     divisors->prescaler = 255;   // Assume highest prescaler
 
@@ -231,7 +297,28 @@ void freq_find_divisors(const double fout, freq_divisors_t* divisors)
         divisors->prescaler = 1;
         divisors->N = whole;
     }
+
+    // Now that N has been fixed, we find its High and low part
+    // taking into account the duty cycle
+    // If N is odd, there will be a roundoff error
+    // and we will increment N by one to preserve 50% duty cycle if requested
+
+    dNhigh = divisors->N * duty_cycle; // floating point
+    dNlow  = divisors->N - dNhigh;     // still floating point
+
+    FREQ_CHECK(dNhigh >=1.0, "High state count NH < 1", ESP_ERR_INVALID_SIZE);
+    FREQ_CHECK(dNlow >= 1.0, "Low  state count NL < 1", ESP_ERR_INVALID_SIZE);
+
+    // If Ntot is odd, we'd better round to even parts
+    // and increment Ntot by one to preserve 50% duty cycle if requested
+    divisors->NH = (uint32_t)(round(dNhigh));
+    divisors->NL = (uint32_t)(round(dNlow));
+    divisors->N  = divisors->NH + divisors->NL;   // May be changed by one unit by rounding
+
+    return ESP_OK;
 }
+
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -242,7 +329,7 @@ uint16_t freq_count_items(uint32_t NH, uint32_t NL)
 
     // Quick way out
     if (NH < 32768 && NL < 32768) {
-        count += 2;  // item + End of transmission
+        count += 1;  // item
         return count;
     }
 
@@ -276,8 +363,8 @@ uint16_t freq_count_items(uint32_t NH, uint32_t NL)
         count += 1;
     }
 
-    // The count includes a final EoTx item
-    count += 1;     
+    // The count does not include a final EoTx item
+    // count += 1;     
     return count;
 }
 
@@ -310,7 +397,7 @@ static rmt_item32_t* freq_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t N
     if ((32767 < NH) && (NH <= 32767*2)) {
         NH -= 32767;
         item->duration0 = 32767; item->level0 = 1;
-        item->duration1 = NH; item->level1 = 1;
+        item->duration1 = NH;    item->level1 = 1;
         item++;
         
     } else {
@@ -348,81 +435,91 @@ static rmt_item32_t* freq_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t N
 static 
 void freq_print_items(const rmt_item32_t* p, uint32_t N)
 {
-    for (int i=0; i<N; i++) {
-        printf("(%d,%d,%d,%d)\t", p[i].duration0, p[i].level0, p[i].duration1, p[i].level1);
+    
+    const uint32_t NN = 8;
+    uint32_t rows = N / NN;
+    uint32_t rem  = N % NN;
+    uint32_t row, offset, i, j;
+
+    ESP_LOGI(FREQ_TAG,"Displaying %d items + EoTx\n", N-1);
+    ESP_LOGI(FREQ_TAG,"rows = %d, rem = %d", rows, rem);
+
+    printf("-----------------------------------------------------\n");
+    for (row = 0; row < rows; row++) {
+        for (i=0; i<NN; i++) {
+            offset = NN*row+i;
+            printf("(%d,%d,%d,%d)\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
+        }
+        printf("\n");
     }
+    for (j=0; j<rem; j++) {
+        offset = NN*rows+j;
+        printf("(%d,%d,%d,%d)\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
+    }
+    if (rem) printf("\n");
+    printf("-----------------------------------------------------\n");
 }
 
 /* -------------------------------------------------------------------------- */
 
 static 
-esp_err_t freq_calc_params(freq_params_t* fp, double Fout, double Dcyc)
+void freq_log_params(double Fout, double Dcyc, freq_params_t* divisors)
 {
+    double Tclk, ErrFreq, ErrDcyc;
 
-    double Tclk, dNhigh, dNlow;
-    double Fout2, Dcyc2, ErrFreq, ErrDcyc;
-    double jitter;
-
-    uint32_t Ntot, Nhigh, Nlow;
-    uint16_t Nitems;
-    uint8_t  Prescaler, Nchan, Nrep;
-
-    // Decompose Frequency into the product of 2 factors: prescaler and Ntot
-    // Decompose the duty cycle into and Nhigh and Nlow numbers
-    Ntot = freq_find_divisors(Fout, &Prescaler);
-    Tclk = (double) Prescaler / FREQ_APB;
-
-    dNhigh = Ntot * Dcyc;       // still floating point
-    dNlow  = Ntot - dNhigh;     // still floating point
-
-    // If Ntot is odd, we'd better round to even parts
-    // and increment Ntot by one to preserve 50% duty cycle if requested
-    Nhigh = (uint32_t)(round(dNhigh));
-    Nlow  = (uint32_t)(round(dNlow));
-    Ntot  = Nhigh + Nlow;   // May be changed by one unit by rounding
-    
     // Recompute the Fout frequency with all that rounding taking place
     // and check the relative  error
-    Fout2 = FREQ_APB / (Prescaler * (double)(Ntot));
-    Dcyc2 = Nhigh    / (double)(Ntot);
-    ErrFreq = (Fout2 - Fout)/Fout;
-    ErrDcyc  = (Dcyc2 - Dcyc)/Dcyc; 
+    divisors->freq       = FREQ_APB / (divisors->prescaler * (double)(divisors->N));
+    divisors->duty_cycle = divisors->NH / (double)(divisors->N);
+    ErrFreq = (divisors->freq - Fout)/Fout;
+    ErrDcyc = (divisors->duty_cycle - Dcyc)/Dcyc; 
+    Tclk    = (double) divisors->prescaler / FREQ_APB;
 
-    FREQ_CHECK(dNhigh >=1.0, "High state count is < 1", ESP_ERR_INVALID_SIZE);
-    FREQ_CHECK(dNlow >=1.0,  "Low state count is < 1",  ESP_ERR_INVALID_SIZE);
+    ESP_LOGI(FREQ_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FREQ_APB, divisors->prescaler, 1/Tclk);    
+    ESP_LOGI(FREQ_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", divisors->N, divisors->NH, divisors->NL);
+    ESP_LOGI(FREQ_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, divisors->freq, ErrFreq*100, Dcyc*100, divisors->duty_cycle*100, ErrDcyc*100);
+}
+
+/* -------------------------------------------------------------------------- */
+
+static 
+esp_err_t freq_calc_params(double Fout, double Dcyc, freq_params_t* divisors)
+{
+
+    double jitter;
+
+    uint16_t Nitems;
+    uint8_t  Nrep;
+
+    // Decompose Frequency into the product of 2 factors: prescaler and N
+    // Decompose N into NH and NL taking into account dyty cycle
+    freq_find_divisors(Fout, Dcyc, divisors);
+    freq_log_params(Fout, Dcyc, divisors);
  
     // See how many RMT 32-bit items needs this frequency generation
     // How many channes does it take and how many repetitions withon a channel
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
-    Nitems = freq_count_items(Nhigh, Nlow);
-    Nchan = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
-    Nrep = Nchan * 63 / (Nitems-1);
-    jitter = 1/((double)(Ntot) * Nrep);
+    Nitems = freq_count_items(divisors->NH, divisors->NL);  // without EoTx
+    divisors->mem_blocks  = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
+    Nrep   = (divisors->mem_blocks * 63) / Nitems;
+    jitter = 1/((double)(divisors->N) * Nrep);
 
-    FREQ_CHECK(Nchan <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-   
-    ESP_LOGI(FREQ_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FREQ_APB, Prescaler, 1/Tclk);    
-    ESP_LOGI(FREQ_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", Ntot, Nhigh, Nlow);
-    ESP_LOGI(FREQ_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, Fout2, ErrFreq*100, Dcyc*100, Dcyc2*100, ErrDcyc*100);
-    ESP_LOGI(FREQ_TAG,"Nitems = %d, NChannels = %d", Nitems, Nchan);
+    FREQ_CHECK(divisors->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
+    ESP_LOGI(FREQ_TAG,"Nitems = %d, Mem Blocks = %d", Nitems, divisors->mem_blocks);
     ESP_LOGI(FREQ_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",Nrep);
-    ESP_LOGI(FREQ_TAG,"Jitter due to repetition %.02f%%",jitter*100);
+    ESP_LOGI(FREQ_TAG,"Loop jitter %.02f%%", jitter*100);
 
-    fp->freq       = Fout2;
-    fp->duty_cycle = Dcyc2;
-    fp->prescaler  = Prescaler;
-    fp->mem_blocks = Nchan;
-    fp->nitems     = (Nitems - 1)*Nrep + 1; // include final EoTx
-    fp->items      = freq_items_alloc(fp->nitems);
-    FREQ_CHECK(fp->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
-    rmt_item32_t* p = fp->items;
+    divisors->nitems     = Nitems * Nrep + 1; // include final EoTx
+    divisors->items      = freq_items_alloc(divisors->nitems);
+    FREQ_CHECK(divisors->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
+    rmt_item32_t* p = divisors->items;
     for(int i = 0 ; i<Nrep; i++) {
-        p = freq_fill_items(p, Nhigh, Nlow);
+        p = freq_fill_items(p, divisors->NH, divisors->NL);
     }
     p->val = 0; // mark end of sequence
 
-    freq_print_items(fp->items, fp->nitems);
+    freq_print_items(divisors->items, divisors->nitems);
 
     return ESP_OK;
 }
@@ -433,29 +530,13 @@ esp_err_t freq_calc_params(freq_params_t* fp, double Fout, double Dcyc)
 /*
  * Initialize the RMT Tx channel
  */
-static void rmt_tx_int()
+static void freq_init()
 {
    
-#if 1
-    rmt_config_t config = {
-        // Common config
-        .channel              = RMT_TX_CHANNEL,
-        .rmt_mode             = RMT_MODE_TX,
-        .gpio_num             = RMT_TX_GPIO,
-        .mem_block_num        = 1,
-        .clk_div              = 200,
-        // Tx only config
-        .tx_config.loop_en    = true,
-        .tx_config.carrier_en = false
-    };
+#if 0
 
-    ESP_ERROR_CHECK(rmt_config(&config));
-    ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items, sizeof(items) / sizeof(items[0]), 0));
-#else
     freq_params_t fparams;
-
-    freq_calc_params(&fparams, 5, 0.5);
+    freq_calc_params(5, 0.5, &fparams);
 
     rmt_config_t config = {
         // Common config
@@ -469,40 +550,46 @@ static void rmt_tx_int()
         .tx_config.carrier_en = false
     };
 
-    printf("-----------------------------------------------------\n");
-    for(int i = 0; i < sizeof(items) / sizeof(items[0]); i++ ) {
-        printf("(%d,%d,%d,%d)\t", items[i].duration0, items[i].level0, items[i].duration1, items[i].level1);
-    }
-    printf("-----------------------------------------------------\n");
+   
     ESP_ERROR_CHECK(rmt_config(&config));
     ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, fparams.items, fparams.nitems, 0));
+
+    int number_of_items = sizeof(items_kk) / sizeof(items_kk[0]);
+    rmt_item32_t* items =  freq_items_alloc(number_of_items);
+    rmt_item32_t *r, *w;
+    r = items_kk;
+    w = items;
+    for (int i = 0; i<number_of_items; i++ )
+        *w++ = *r++;
+
+    freq_print_items(items, number_of_items);
+    ESP_LOGI(RMT_TX_TAG, "Number of items = %d",number_of_items);
+    ESP_LOGI(RMT_TX_TAG, "Number of items (again) = %d", fparams.nitems);
+    //ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, items, number_of_items, false));
+    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items_kk, number_of_items, 0));
+   
+#else
+    freq_params_t fparams;
+
+    freq_calc_params(0.25, 0.5, &fparams);
+
+    rmt_config_t config = {
+        // Common config
+        .channel              = RMT_TX_CHANNEL,
+        .rmt_mode             = RMT_MODE_TX,
+        .gpio_num             = RMT_TX_GPIO,
+        .mem_block_num        = fparams.mem_blocks,
+        .clk_div              = fparams.prescaler,
+        // Tx only config
+        .tx_config.loop_en    = true,
+        .tx_config.carrier_en = false
+    };
+
+    ESP_ERROR_CHECK(rmt_config(&config));
+    ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
+    ESP_ERROR_CHECK(rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0));
 #endif
 
-
-#if 0
-    freq_calc_params(0.01,    0.75);
-    freq_calc_params(0.01,    0.5);
-    freq_calc_params(0.02,    0.5);
-    freq_calc_params(0.02,    0.1);
-    freq_calc_params(0.025,   0.5);
-    freq_calc_params(0.05,    0.75);
-    freq_calc_params(0.05,    0.5);
-    freq_calc_params(0.1,     0.5);
-    freq_calc_params(0.1,     0.63);
-    freq_calc_params(0.1,     0.005);
-    freq_calc_params(0.1,     1-0.005);
-    freq_calc_params(5,       0.5);
-    freq_calc_params(5,       1-0.005);
-    freq_calc_params(5,       0.5);
-    freq_calc_params(509,     0.5);
-    freq_calc_params(6473,    0.5);
-    freq_calc_params(43247,   0.7);
-    freq_calc_params(50000,   0.7);
-    freq_calc_params(70729.0,  0.5);
-    freq_calc_params(100000.0, 0.5);
-    freq_calc_params(500000.0, 0.5);
-#endif
 
 }
 
@@ -515,24 +602,9 @@ void app_main(void *ignore)
 {
     int i = 1;
 
-#if 0
     ESP_LOGI(RMT_TX_TAG, "Configuring transmitter");
-    rmt_tx_int();
-    int number_of_items = sizeof(items) / sizeof(items[0]);
-    ESP_LOGI(RMT_TX_TAG, "Number of items = %d",number_of_items);
-    //ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, items, number_of_items, false));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items, number_of_items, 0));
+    freq_init();
     ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, true));
-#else
-    ESP_LOGI(RMT_TX_TAG, "Configuring transmitter");
-    rmt_tx_int();
-    int number_of_items = sizeof(items) / sizeof(items[0]);
-    ESP_LOGI(RMT_TX_TAG, "Number of items = %d",number_of_items);
-    //ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, items, number_of_items, false));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items, number_of_items, 0));
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, true));
-
-#endif    
 
     while (1) {
         ESP_LOGI(RMT_TX_TAG, "Forever loop (%d)", i++);

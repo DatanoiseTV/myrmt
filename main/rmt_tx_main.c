@@ -476,6 +476,12 @@ static void fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
     ESP_ERROR_CHECK(rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0));
 }
 
+/* -------------------------------------------------------------------------- */
+
+esp_err_t fgen_start(uint8_t channel)
+{
+    return rmt_tx_start(channel, true);
+}
 
 /* ************************************************************************* */
 /*                             MAIN ENTRY POINT                              */
@@ -491,10 +497,10 @@ void app_main(void *ignore)
     fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0);
     fgen_init(RMT_CHANNEL_6, GPIO_21, 50012);
 
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_0, true));
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_2, true));
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_4, true));
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_6, true));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_0));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_4));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_6));
 
     while (1) {
         ESP_LOGI(FGEN_TAG, "Forever loop (%d)", i++);

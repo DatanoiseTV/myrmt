@@ -113,7 +113,6 @@ Jitter due to repetition 0.7937%
 #include "esp_log.h"
 #include "driver/rmt.h"
 
-
 // --------------
 // Local includes
 // --------------
@@ -128,12 +127,12 @@ Jitter due to repetition 0.7937%
 #define NO_RX_BUFFER 0
 #define DEFAULT_ALLOC_FLAGS 0
 
-#define FREQ_APB 80000000.0
-#define FREQ_TAG "Freq"
+#define FGEN_APB 80000000.0
+#define FGEN_TAG "FGen"
 
-#define FREQ_CHECK(a, str, ret_val) \
+#define FGEN_CHECK(a, str, ret_val) \
     if (!(a)) { \
-        ESP_LOGE(FREQ_TAG,"%s(%d): %s", __FUNCTION__, __LINE__, str); \
+        ESP_LOGE(FGEN_TAG,"%s(%d): %s", __FUNCTION__, __LINE__, str); \
         return (ret_val); \
     }
 
@@ -144,18 +143,21 @@ Jitter due to repetition 0.7937%
      _a < _b ? _a : _b; })
 
 
+/* ************************************************************************* */
+/*                               DATATYPES SECTION                           */
+/* ************************************************************************* */
 
 typedef struct {
-    double        freq;       // real frequency after adjustment
-    double        duty_cycle; // duty cycle after adjustments
-    rmt_item32_t* items;      // Array of items including EoTx
-    uint16_t      nitems;     // number of RMT items in the array, including EoTx
-    uint8_t       mem_blocks; // number of 64 item memory blocks consumed
+    double        freq;       // real frequency after adjustment (Hz)
+    double        duty_cycle; // duty cycle after adjustments (0 < x < 1)
+    rmt_item32_t* items;      // Array of RMT items including EoTx
+    size_t        nitems;     // number of RMT items in the array, including EoTx
+    uint8_t       mem_blocks; // number of memory blocks consumed (1 block = 64 RMT items)
     uint8_t       prescaler;  // RMT prescaler value
-    uint32_t      N;          // Big number to decompose in items (internal value)
+    uint32_t      N;          // Big divisor to decompose in items (internal value)
     uint32_t      NH;         // The high level part of N (N = NH + NL)
     uint32_t      NL;         // The low level part of N  (N = NH + NL)
-} freq_params_t;
+} fgen_params_t;
 
 
 
@@ -163,109 +165,25 @@ typedef struct {
 /*                          GLOBAL VARIABLES SECTION                         */
 /* ************************************************************************* */
 
-static const char *RMT_TX_TAG = "RMT Tx";
-
-
-rmt_item32_t items_kk[] = {
-// 1
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-// 2
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-// 3
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-// 4
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-
-// 5
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-
-// 6
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-
-// 7
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-
-// 8
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-    {{{ 32000, 1, 32000, 0 }}},
-
-    
-    // RMT end marker
-    {{{ 0, 0, 0, 0 }}}
-};
-
 
 /* ************************************************************************* */
 /*                        AUXILIAR FUNCTIONS SECTION                         */
 /* ************************************************************************* */
 
 static 
-rmt_item32_t* freq_items_alloc(uint16_t nitems)
+rmt_item32_t* fgen_alloc_items(size_t nitems)
 {
     return (rmt_item32_t*) calloc(nitems, sizeof(rmt_item32_t));
 }
 
 /* -------------------------------------------------------------------------- */
 
-// Find two divisors N and Prescaler so that
-// FREQ_APB = Fout * (Prescaler * N)
+// Find two fgen N and Prescaler so that
+// FGEN_APB = Fout * (Prescaler * N)
 // being Prescaler and N both integers
 
 static 
-esp_err_t freq_find_divisors(double fout, double duty_cycle, freq_params_t* divisors)
+esp_err_t fgen_find_fgen(double fout, double duty_cycle, fgen_params_t* fgen)
 {
 
     double whole; 
@@ -273,29 +191,29 @@ esp_err_t freq_find_divisors(double fout, double duty_cycle, freq_params_t* divi
     double err, new_err;
     double dNhigh, dNlow;
 
-    divisors->prescaler = 255;   // Assume highest prescaler
+    fgen->prescaler = 255;   // Assume highest prescaler
 
-    whole = round(FREQ_APB/fout);
-    divisors->N     = whole / divisors->prescaler;
-    err   = fmod(whole,  divisors->prescaler);
+    whole   = round(FGEN_APB/fout);
+    fgen->N = whole / fgen->prescaler;
+    err     = fmod(whole,  fgen->prescaler);
 
-    while (divisors->prescaler > 1) {
-        new_N     = whole / divisors->prescaler;
-        new_err   = fmod(whole, divisors->prescaler);
+    while (fgen->prescaler > 1) {
+        new_N     = whole / fgen->prescaler;
+        new_err   = fmod(whole, fgen->prescaler);
         if (new_err == 0.0 && new_N > 1.0) {
-            err = new_err;
-            divisors->N   = new_N;
+            err     = new_err;
+            fgen->N = new_N;
             break;
         } else if (new_err < err) {
-            err = new_err;
-            divisors->N   = new_N;
+            err     = new_err;
+            fgen->N = new_N;
         }
-        divisors->prescaler -= 1; 
+        fgen->prescaler -= 1; 
     }
 
-    if (divisors->prescaler == 2 && err != 0.0) {
-        divisors->prescaler = 1;
-        divisors->N = whole;
+    if (fgen->prescaler == 2 && err != 0.0) {
+        fgen->prescaler = 1;
+        fgen->N         = whole;
     }
 
     // Now that N has been fixed, we find its High and low part
@@ -303,17 +221,17 @@ esp_err_t freq_find_divisors(double fout, double duty_cycle, freq_params_t* divi
     // If N is odd, there will be a roundoff error
     // and we will increment N by one to preserve 50% duty cycle if requested
 
-    dNhigh = divisors->N * duty_cycle; // floating point
-    dNlow  = divisors->N - dNhigh;     // still floating point
+    dNhigh = fgen->N * duty_cycle; // floating point
+    dNlow  = fgen->N - dNhigh;     // still floating point
 
-    FREQ_CHECK(dNhigh >=1.0, "High state count NH < 1", ESP_ERR_INVALID_SIZE);
-    FREQ_CHECK(dNlow >= 1.0, "Low  state count NL < 1", ESP_ERR_INVALID_SIZE);
+    FGEN_CHECK(dNhigh >=1.0, "High state count NH < 1", ESP_ERR_INVALID_SIZE);
+    FGEN_CHECK(dNlow >= 1.0, "Low  state count NL < 1", ESP_ERR_INVALID_SIZE);
 
     // If Ntot is odd, we'd better round to even parts
     // and increment Ntot by one to preserve 50% duty cycle if requested
-    divisors->NH = (uint32_t)(round(dNhigh));
-    divisors->NL = (uint32_t)(round(dNlow));
-    divisors->N  = divisors->NH + divisors->NL;   // May be changed by one unit by rounding
+    fgen->NH = (uint32_t)(round(dNhigh));
+    fgen->NL = (uint32_t)(round(dNlow));
+    fgen->N  = fgen->NH + fgen->NL;   // May be changed by one unit by rounding
 
     return ESP_OK;
 }
@@ -323,11 +241,11 @@ esp_err_t freq_find_divisors(double fout, double duty_cycle, freq_params_t* divi
 /* -------------------------------------------------------------------------- */
 
 static 
-uint16_t freq_count_items(uint32_t NH, uint32_t NL)
+uint16_t fgen_count_items(uint32_t NH, uint32_t NL)
 {
     uint16_t count = 0;
 
-    // Quick way out
+    // Quick way out for only 1 item
     if (NH < 32768 && NL < 32768) {
         count += 1;  // item
         return count;
@@ -364,7 +282,6 @@ uint16_t freq_count_items(uint32_t NH, uint32_t NL)
     }
 
     // The count does not include a final EoTx item
-    // count += 1;     
     return count;
 }
 
@@ -374,10 +291,11 @@ uint16_t freq_count_items(uint32_t NH, uint32_t NL)
 // Give an updated pointer so that we can mark the end of transmission
 // or concatenate more items
 // NO EoTX value is written, must be written outside
-static rmt_item32_t* freq_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t NL)
+static 
+rmt_item32_t* fgen_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t NL)
 {
 
-    // Quick way out
+    // Quick way out for only 1 item
     if (NH < 32768 && NL < 32768) {
         item->duration0 = NH; item->level0 = 1;
         item->duration1 = NL; item->level1 = 0;
@@ -433,7 +351,7 @@ static rmt_item32_t* freq_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t N
 /* -------------------------------------------------------------------------- */
    
 static 
-void freq_print_items(const rmt_item32_t* p, uint32_t N)
+void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 {
     
     const uint32_t NN = 8;
@@ -441,8 +359,8 @@ void freq_print_items(const rmt_item32_t* p, uint32_t N)
     uint32_t rem  = N % NN;
     uint32_t row, offset, i, j;
 
-    ESP_LOGI(FREQ_TAG,"Displaying %d items + EoTx\n", N-1);
-    ESP_LOGI(FREQ_TAG,"rows = %d, rem = %d", rows, rem);
+    ESP_LOGI(FGEN_TAG,"Displaying %d items + EoTx\n", N-1);
+    ESP_LOGI(FGEN_TAG,"rows = %d, rem = %d", rows, rem);
 
     printf("-----------------------------------------------------\n");
     for (row = 0; row < rows; row++) {
@@ -463,27 +381,27 @@ void freq_print_items(const rmt_item32_t* p, uint32_t N)
 /* -------------------------------------------------------------------------- */
 
 static 
-void freq_log_params(double Fout, double Dcyc, freq_params_t* divisors)
+void fgen_log_params(double Fout, double Dcyc, fgen_params_t* fgen)
 {
     double Tclk, ErrFreq, ErrDcyc;
 
     // Recompute the Fout frequency with all that rounding taking place
     // and check the relative  error
-    divisors->freq       = FREQ_APB / (divisors->prescaler * (double)(divisors->N));
-    divisors->duty_cycle = divisors->NH / (double)(divisors->N);
-    ErrFreq = (divisors->freq - Fout)/Fout;
-    ErrDcyc = (divisors->duty_cycle - Dcyc)/Dcyc; 
-    Tclk    = (double) divisors->prescaler / FREQ_APB;
+    fgen->freq       = FGEN_APB / (fgen->prescaler * (double)(fgen->N));
+    fgen->duty_cycle = fgen->NH / (double)(fgen->N);
+    ErrFreq = (fgen->freq - Fout)/Fout;
+    ErrDcyc = (fgen->duty_cycle - Dcyc)/Dcyc; 
+    Tclk    = (double) fgen->prescaler / FGEN_APB;
 
-    ESP_LOGI(FREQ_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FREQ_APB, divisors->prescaler, 1/Tclk);    
-    ESP_LOGI(FREQ_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", divisors->N, divisors->NH, divisors->NL);
-    ESP_LOGI(FREQ_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, divisors->freq, ErrFreq*100, Dcyc*100, divisors->duty_cycle*100, ErrDcyc*100);
+    ESP_LOGI(FGEN_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FGEN_APB, fgen->prescaler, 1/Tclk);    
+    ESP_LOGI(FGEN_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", fgen->N, fgen->NH, fgen->NL);
+    ESP_LOGI(FGEN_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, fgen->freq, ErrFreq*100, Dcyc*100, fgen->duty_cycle*100, ErrDcyc*100);
 }
 
 /* -------------------------------------------------------------------------- */
 
 static 
-esp_err_t freq_calc_params(double Fout, double Dcyc, freq_params_t* divisors)
+esp_err_t fgen_calc_params(double Fout, double Dcyc, fgen_params_t* fgen)
 {
 
     double jitter;
@@ -493,33 +411,33 @@ esp_err_t freq_calc_params(double Fout, double Dcyc, freq_params_t* divisors)
 
     // Decompose Frequency into the product of 2 factors: prescaler and N
     // Decompose N into NH and NL taking into account dyty cycle
-    freq_find_divisors(Fout, Dcyc, divisors);
-    freq_log_params(Fout, Dcyc, divisors);
+    fgen_find_fgen(Fout, Dcyc, fgen);
+    fgen_log_params(Fout, Dcyc, fgen);
  
     // See how many RMT 32-bit items needs this frequency generation
     // How many channes does it take and how many repetitions withon a channel
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
-    Nitems = freq_count_items(divisors->NH, divisors->NL);  // without EoTx
-    divisors->mem_blocks  = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
-    Nrep   = (divisors->mem_blocks * 63) / Nitems;
-    jitter = 1/((double)(divisors->N) * Nrep);
+    Nitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
+    fgen->mem_blocks  = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
+    Nrep   = (fgen->mem_blocks * 63) / Nitems;
+    jitter = 1/((double)(fgen->N) * Nrep);
 
-    FREQ_CHECK(divisors->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FREQ_TAG,"Nitems = %d, Mem Blocks = %d", Nitems, divisors->mem_blocks);
-    ESP_LOGI(FREQ_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",Nrep);
-    ESP_LOGI(FREQ_TAG,"Loop jitter %.02f%%", jitter*100);
+    FGEN_CHECK(fgen->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
+    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", Nitems, fgen->mem_blocks);
+    ESP_LOGI(FGEN_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",Nrep);
+    ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
-    divisors->nitems     = Nitems * Nrep + 1; // include final EoTx
-    divisors->items      = freq_items_alloc(divisors->nitems);
-    FREQ_CHECK(divisors->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
-    rmt_item32_t* p = divisors->items;
+    fgen->nitems     = Nitems * Nrep + 1; // include final EoTx
+    fgen->items      = fgen_alloc_items(fgen->nitems);
+    FGEN_CHECK(fgen->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
+    rmt_item32_t* p = fgen->items;
     for(int i = 0 ; i<Nrep; i++) {
-        p = freq_fill_items(p, divisors->NH, divisors->NL);
+        p = fgen_fill_items(p, fgen->NH, fgen->NL);
     }
     p->val = 0; // mark end of sequence
 
-    freq_print_items(divisors->items, divisors->nitems);
+    fgen_print_items(fgen->items, fgen->nitems);
 
     return ESP_OK;
 }
@@ -530,54 +448,18 @@ esp_err_t freq_calc_params(double Fout, double Dcyc, freq_params_t* divisors)
 /*
  * Initialize the RMT Tx channel
  */
-static void freq_init()
+static void fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
 {
    
-#if 0
+    fgen_params_t fparams;
 
-    freq_params_t fparams;
-    freq_calc_params(5, 0.5, &fparams);
-
-    rmt_config_t config = {
-        // Common config
-        .channel              = RMT_TX_CHANNEL,
-        .rmt_mode             = RMT_MODE_TX,
-        .gpio_num             = RMT_TX_GPIO,
-        .mem_block_num        = fparams.mem_blocks,
-        .clk_div              = fparams.prescaler,
-        // Tx only config
-        .tx_config.loop_en    = true,
-        .tx_config.carrier_en = false
-    };
-
-   
-    ESP_ERROR_CHECK(rmt_config(&config));
-    ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
-
-    int number_of_items = sizeof(items_kk) / sizeof(items_kk[0]);
-    rmt_item32_t* items =  freq_items_alloc(number_of_items);
-    rmt_item32_t *r, *w;
-    r = items_kk;
-    w = items;
-    for (int i = 0; i<number_of_items; i++ )
-        *w++ = *r++;
-
-    freq_print_items(items, number_of_items);
-    ESP_LOGI(RMT_TX_TAG, "Number of items = %d",number_of_items);
-    ESP_LOGI(RMT_TX_TAG, "Number of items (again) = %d", fparams.nitems);
-    //ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, items, number_of_items, false));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(RMT_TX_CHANNEL, items_kk, number_of_items, 0));
-   
-#else
-    freq_params_t fparams;
-
-    freq_calc_params(0.25, 0.5, &fparams);
+    ESP_ERROR_CHECK(fgen_calc_params(freq, 0.5, &fparams));
 
     rmt_config_t config = {
         // Common config
-        .channel              = RMT_TX_CHANNEL,
+        .channel              = channel,
         .rmt_mode             = RMT_MODE_TX,
-        .gpio_num             = RMT_TX_GPIO,
+        .gpio_num             = gpio_num,
         .mem_block_num        = fparams.mem_blocks,
         .clk_div              = fparams.prescaler,
         // Tx only config
@@ -588,9 +470,6 @@ static void freq_init()
     ESP_ERROR_CHECK(rmt_config(&config));
     ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
     ESP_ERROR_CHECK(rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0));
-#endif
-
-
 }
 
 
@@ -602,12 +481,12 @@ void app_main(void *ignore)
 {
     int i = 1;
 
-    ESP_LOGI(RMT_TX_TAG, "Configuring transmitter");
-    freq_init();
-    ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, true));
+    ESP_LOGI(FGEN_TAG, "Configuring transmitter");
+    fgen_init(RMT_CHANNEL_0, 18, 0.250);
+    ESP_ERROR_CHECK(rmt_tx_start(RMT_CHANNEL_0, true));
 
     while (1) {
-        ESP_LOGI(RMT_TX_TAG, "Forever loop (%d)", i++);
+        ESP_LOGI(FGEN_TAG, "Forever loop (%d)", i++);
         vTaskDelay(120000 / portTICK_PERIOD_MS);
     }
     vTaskDelete(NULL);

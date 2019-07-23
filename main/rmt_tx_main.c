@@ -446,18 +446,23 @@ esp_err_t fgen_calc_params(double Fout, double duty_cycle, fgen_params_t* fgen)
     return ESP_OK;
 }
 
-
-/* -------------------------------------------------------------------------- */
+/* ************************************************************************* */
+/*                               API FUNCTIONS                               */
+/* ************************************************************************* */
 
 /*
- * Initialize the RMT Tx channel
+ * Initialize a RMT Tx channel
  */
-static void fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
+esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
 {
    
     fgen_params_t fparams;
+    esp_err_t ret;
 
-    ESP_ERROR_CHECK(fgen_calc_params(freq, 0.5, &fparams));
+    ret = fgen_calc_params(freq, 0.5, &fparams);
+    FGEN_CHECK(ret == ESP_OK, "Error calculating frequency generator parameters",  ret);
+
+    //ESP_ERROR_CHECK(fgen_calc_params(freq, 0.5, &fparams));
 
     rmt_config_t config = {
         // Common config
@@ -471,9 +476,16 @@ static void fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
         .tx_config.carrier_en = false
     };
 
-    ESP_ERROR_CHECK(rmt_config(&config));
-    ESP_ERROR_CHECK(rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS));
-    ESP_ERROR_CHECK(rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0));
+    ret = rmt_config(&config);
+    FGEN_CHECK(ret == ESP_OK, "Error configure RMT module",  ret);
+
+    ret = rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
+    FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
+
+    ret = rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0);
+    FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
+
+    return ESP_OK;
 }
 
 /* -------------------------------------------------------------------------- */

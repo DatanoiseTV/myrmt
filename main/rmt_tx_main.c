@@ -479,7 +479,9 @@ esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq, bool allocat
         .clk_div              = fparams->prescaler,
         // Tx only config
         .tx_config.loop_en    = true,
-        .tx_config.carrier_en = false
+        .tx_config.carrier_en = false,
+        .tx_config.idle_level = RMT_IDLE_LEVEL_LOW,
+        .tx_config.idle_output_en = false
     };
 
     ret = rmt_config(&config);
@@ -488,8 +490,14 @@ esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq, bool allocat
     ret = rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
 
+    // Copy the pattern we've just generated to the internal RMT buffers
     ret = rmt_fill_tx_items(config.channel, fparams->items, fparams->nitems, 0);
     FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
+
+    // we no longer need the allocated memory, since we copied the sequence 
+    // to the RMT buffers
+    free(fparams->items);
+    fparams->items = NULL;
 
     return ESP_OK;
 }
@@ -512,14 +520,14 @@ void app_main(void *ignore)
 
     ESP_LOGI(FGEN_TAG, "Configuring transmitter");
     fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04,  true, &fparams[0]);
-    //fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
-    //fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
-    //fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
+    fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
+    fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
+    fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
 
     ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_0));
-    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));
-    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_4));
-    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_6));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_4));
+    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_6));
 
     while (1) {
         ESP_LOGI(FGEN_TAG, "Forever loop (%d)", i++);

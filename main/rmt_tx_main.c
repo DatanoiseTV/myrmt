@@ -173,13 +173,6 @@ typedef struct {
 /*                        AUXILIAR FUNCTIONS SECTION                         */
 /* ************************************************************************* */
 
-static 
-rmt_item32_t* fgen_alloc_items(size_t nitems)
-{
-    return (rmt_item32_t*) calloc(nitems, sizeof(rmt_item32_t));
-}
-
-/* -------------------------------------------------------------------------- */
 
 // Find two fgen N and Prescaler so that
 // FGEN_APB = Fout * (Prescaler * N)
@@ -404,7 +397,26 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 /* -------------------------------------------------------------------------- */
 
 static 
-esp_err_t fgen_calc_params(double Fout, double duty_cycle, fgen_params_t* fgen)
+esp_err_t fgen_allocate(fgen_params_t* fgen)
+{
+    // Allocate memory and fill it with pattern
+    fgen->items      = (rmt_item32_t*) calloc(fgen->nitems, sizeof(rmt_item32_t));
+    FGEN_CHECK(fgen->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
+
+    // Generate the pattern and repeat it as much as we can within a 64 -item block
+    rmt_item32_t* p = fgen->items;
+    for(int i = 0 ; i<fgen->nrep; i++) {
+        p = fgen_fill_items(p, fgen->NH, fgen->NL);
+    }
+    p->val = 0; // mark end of sequence
+    fgen_print_items(fgen->items, fgen->nitems);
+    return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+
+static 
+esp_err_t fgen_config(double Fout, double duty_cycle, bool allocate, fgen_params_t* fgen)
 {
 
     double jitter;
@@ -431,19 +443,12 @@ esp_err_t fgen_calc_params(double Fout, double duty_cycle, fgen_params_t* fgen)
     ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
     fgen->nitems     = Nitems * fgen->nrep + 1; // global array size including final EoTx
-    fgen->items      = fgen_alloc_items(fgen->nitems);
-    FGEN_CHECK(fgen->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
-
-    // Generate the pattern and repeat it as much as we can within a 64 -item block
-    rmt_item32_t* p = fgen->items;
-    for(int i = 0 ; i<fgen->nrep; i++) {
-        p = fgen_fill_items(p, fgen->NH, fgen->NL);
+    if (!allocate ) {
+        fgen->items = NULL;
+        return ESP_OK;
     }
-    p->val = 0; // mark end of sequence
-
-    fgen_print_items(fgen->items, fgen->nitems);
-
-    return ESP_OK;
+    
+    return fgen_allocate(fgen);
 }
 
 /* ************************************************************************* */
@@ -453,24 +458,23 @@ esp_err_t fgen_calc_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 /*
  * Initialize a RMT Tx channel
  */
-esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
+esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq, bool allocate, fgen_params_t* fparams)
 {
    
-    fgen_params_t fparams;
     esp_err_t ret;
 
-    ret = fgen_calc_params(freq, 0.5, &fparams);
+    ret = fgen_config(freq, 0.5, allocate, fparams);
     FGEN_CHECK(ret == ESP_OK, "Error calculating frequency generator parameters",  ret);
-
-    //ESP_ERROR_CHECK(fgen_calc_params(freq, 0.5, &fparams));
+    if (! allocate )
+        return ESP_OK;
 
     rmt_config_t config = {
         // Common config
         .channel              = channel,
         .rmt_mode             = RMT_MODE_TX,
         .gpio_num             = gpio_num,
-        .mem_block_num        = fparams.mem_blocks,
-        .clk_div              = fparams.prescaler,
+        .mem_block_num        = fparams->mem_blocks,
+        .clk_div              = fparams->prescaler,
         // Tx only config
         .tx_config.loop_en    = true,
         .tx_config.carrier_en = false
@@ -482,7 +486,7 @@ esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq)
     ret = rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
 
-    ret = rmt_fill_tx_items(config.channel, fparams.items, fparams.nitems, 0);
+    ret = rmt_fill_tx_items(config.channel, fparams->items, fparams->nitems, 0);
     FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
 
     return ESP_OK;
@@ -502,12 +506,13 @@ esp_err_t fgen_start(uint8_t channel)
 void app_main(void *ignore)
 {
     int i = 1;
+    fgen_params_t fparams[4];
 
     ESP_LOGI(FGEN_TAG, "Configuring transmitter");
-    fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04);
-    fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1);
-    fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0);
-    fgen_init(RMT_CHANNEL_6, GPIO_21, 50012);
+    fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04,  true, &fparams[0]);
+    fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
+    fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
+    fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
 
     ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_0));
     ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));

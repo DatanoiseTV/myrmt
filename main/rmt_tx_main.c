@@ -363,13 +363,13 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
     for (row = 0; row < rows; row++) {
         for (i=0; i<NN; i++) {
             offset = NN*row+i;
-            printf("(%d,%d,%d,%d)\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
+            printf("{{{%d,%d,%d,%d}}},\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
         }
         printf("\n");
     }
     for (j=0; j<rem; j++) {
         offset = NN*rows+j;
-        printf("(%d,%d,%d,%d)\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
+        printf("{{{%d,%d,%d,%d}}},\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
     }
     if (rem) printf("\n");
     printf("-----------------------------------------------------\n");

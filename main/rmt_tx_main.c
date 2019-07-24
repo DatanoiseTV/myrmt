@@ -154,6 +154,7 @@ typedef struct {
     double        duty_cycle; // duty cycle after adjustments (0 < x < 1)
     rmt_item32_t* items;      // Array of RMT items including EoTx
     size_t        nitems;     // number of RMT items in the array, including EoTx
+    size_t        onitems;    // original items sequence length without duplication nor  EoTx
     uint8_t       nrep;       // how many times the items sequence is repeated (1 < nrep)
     uint8_t       mem_blocks; // number of memory blocks consumed (1 block = 64 RMT items)
     uint8_t       prescaler;  // RMT prescaler value
@@ -421,8 +422,6 @@ esp_err_t fgen_config(double Fout, double duty_cycle, bool allocate, fgen_params
 
     double jitter;
 
-    uint16_t Nitems;
-
     // Decompose Frequency into the product of 2 factors: prescaler and N
     // Decompose N into NH and NL taking into account dyty cycle
     fgen_find_freq(Fout, duty_cycle, fgen);
@@ -432,17 +431,20 @@ esp_err_t fgen_config(double Fout, double duty_cycle, bool allocate, fgen_params
     // How many channes does it take and how many repetitions withon a channel
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
-    Nitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
-    fgen->mem_blocks = (Nitems > 0 ) ? 1 + (Nitems / 64) : 0;
-    fgen->nrep       = (fgen->mem_blocks * 63) / Nitems;
+    fgen->onitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
+    fgen->mem_blocks = (fgen->onitems > 0 ) ? 1 + (fgen->onitems / 64) : 0;
+    // if only 1 memory block, make it double
+    fgen->mem_blocks = (fgen->mem_blocks == 1 ) ? 2 : fgen->mem_blocks;
+    
+    fgen->nrep       = (fgen->mem_blocks * 63) / fgen->onitems;
     jitter = 1/((double)(fgen->N) * fgen->nrep);
 
     FGEN_CHECK(fgen->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", Nitems, fgen->mem_blocks);
-    ESP_LOGI(FGEN_TAG,"This sequence can be repeated %d times + final EoTx (0,0,0,0)",fgen->nrep);
+    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", fgen->onitems, fgen->mem_blocks);
+    ESP_LOGI(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",fgen->nrep);
     ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
-    fgen->nitems     = Nitems * fgen->nrep + 1; // global array size including final EoTx
+    fgen->nitems     = fgen->onitems * fgen->nrep + 1; // global array size including final EoTx
     if (!allocate ) {
         fgen->items = NULL;
         return ESP_OK;
@@ -510,14 +512,14 @@ void app_main(void *ignore)
 
     ESP_LOGI(FGEN_TAG, "Configuring transmitter");
     fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04,  true, &fparams[0]);
-    fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
-    fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
-    fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
+    //fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
+    //fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
+    //fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
 
     ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_0));
-    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));
-    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_4));
-    ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_6));
+    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_2));
+    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_4));
+    //ESP_ERROR_CHECK(fgen_start(RMT_CHANNEL_6));
 
     while (1) {
         ESP_LOGI(FGEN_TAG, "Forever loop (%d)", i++);

@@ -177,7 +177,7 @@ rmt_channel_t fgen_channel_alloc(size_t mem_blocks)
                 mem_blocks -= 1;
                 // Marking channels > ch as unavailable because we use their memory blocks
                 for(rmt_channel_t j = ch+1; j<ch+1+mem_blocks; j++) {
-                    ESP_LOGI(FGEN_TAG,"Marking RMT channel %d as unavailable", ch);
+                    ESP_LOGI(FGEN_TAG,"Marking RMT channel %d as unavailable", j);
                     FREQ_CHANNEL[j].state = FGEN_CHANNEL_UNAVAILABLE;
                     FREQ_CHANNEL[j].mem_blocks = 0;
                 }
@@ -388,8 +388,8 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
     uint32_t rem  = N % NN;
     uint32_t row, offset, i, j;
 
-    ESP_LOGI(FGEN_TAG,"Displaying %d items + EoTx\n", N-1);
-    ESP_LOGI(FGEN_TAG,"rows = %d, rem = %d", rows, rem);
+    ESP_LOGI(FGEN_TAG,"Displaying %d items + EoTx", N-1);
+    ESP_LOGI(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
 
     printf("-----------------------------------------------------\n");
     for (row = 0; row < rows; row++) {

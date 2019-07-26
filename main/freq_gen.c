@@ -435,47 +435,38 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_info_t* fgen)
 /* ************************************************************************* */
 
 
-esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* fparams)
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
 {
     double jitter;
 
     // Decompose Frequency into the product of 2 factors: prescaler and N
     // Decompose N into NH and NL taking into account dyty cycle
-    fgen_find_freq(freq,  duty_cycle, fparams);
-    fgen_log_params(freq, duty_cycle, fparams);
+    fgen_find_freq(freq,  duty_cycle, info);
+    fgen_log_params(freq, duty_cycle, info);
  
     // See how many RMT 32-bit items needs this frequency generation
     // How many channes does it take and how many repetitions withon a channel
     // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
 
-    fparams->onitems    = fgen_count_items(fparams->NH, fparams->NL);  // without EoTx
-    fparams->mem_blocks = (fparams->onitems > 0 ) ? 1 + (fparams->onitems / 64) : 0;
-    fparams->nrep       = (fparams->mem_blocks * 63) / fparams->onitems;
-    jitter = 1/((double)(fparams->N) * fparams->nrep);
+    info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
+    info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
+    info->nrep       = (info->mem_blocks * 63) / info->onitems;
+    jitter = 1/((double)(info->N) * info->nrep);
 
-    FGEN_CHECK(fparams->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", fparams->onitems, fparams->mem_blocks);
-    ESP_LOGI(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",fparams->nrep);
+    FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
+    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
+    ESP_LOGI(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
     ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
-    fparams->nitems     = fparams->onitems * fparams->nrep + 1; // global array size including final EoTx
+    info->nitems     = info->onitems * info->nrep + 1; // global array size including final EoTx
     return ESP_OK;
 }
 
 /* -------------------------------------------------------------------------- */
 
-esp_err_t fgen_allocate(const fgen_info_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res)
+static
+void fgen_waveform(fgen_resources_t* res)
 {
-    esp_err_t ret;
-
-    res->info = *fparams;   // copy structure
-
-    // Allocate a free GPIO pin
-    res->gpio_num   = fgen_gpio_alloc(gpio_num);
-    FGEN_CHECK(res->gpio_num != GPIO_NUM_NC, "No Free GPIO",  ESP_ERR_NO_MEM);
-
-    res->items      = (rmt_item32_t*) calloc(res->info.nitems, sizeof(rmt_item32_t));
-    FGEN_CHECK(res->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
     // Generate the pattern and repeat it as much as we can within a 64 -item block
     rmt_item32_t* p = res->items;
     for(int i = 0 ; i<res->info.nrep; i++) {
@@ -483,6 +474,24 @@ esp_err_t fgen_allocate(const fgen_info_t* fparams, gpio_num_t gpio_num, fgen_re
     }
     p->val = 0; // mark end of sequence
     fgen_print_items(res->items, res->info.nitems);
+}
+/* -------------------------------------------------------------------------- */
+
+esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resources_t* res)
+{
+    esp_err_t ret;
+
+    res->info = *info;   // copy structure
+
+    // Allocate a free GPIO pin
+    res->gpio_num   = fgen_gpio_alloc(gpio_num);
+    FGEN_CHECK(res->gpio_num != GPIO_NUM_NC, "No Free GPIO",  ESP_ERR_NO_MEM);
+
+    res->items      = (rmt_item32_t*) calloc(res->info.nitems, sizeof(rmt_item32_t));
+    FGEN_CHECK(res->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
+   
+    // Generate the pattern and repeat it as much as we can within a 64 -item block
+    fgen_waveform(res);
 
     // Allocate a free RMT channel
     res->channel = fgen_channel_alloc(res->info.mem_blocks);
@@ -508,7 +517,7 @@ esp_err_t fgen_allocate(const fgen_info_t* fparams, gpio_num_t gpio_num, fgen_re
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
 
     // Copy the pattern we've just generated to the internal RMT buffers
-    ret = rmt_fill_tx_items(config.channel, res->items, fparams->nitems, 0);
+    ret = rmt_fill_tx_items(config.channel, res->items, info->nitems, 0);
     FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
 
     // we no longer need the allocated memory, since we copied the sequence 

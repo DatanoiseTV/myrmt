@@ -75,11 +75,6 @@ void app_main(void *ignore)
     fgen_allocate(&fparams[2], GPIO_19, &resource[2]);
     fgen_allocate(&fparams[3], GPIO_21, &resource[3]);
 
-    //fgen_init(RMT_CHANNEL_0, GPIO_5,  0.04,  true, &fparams[0]);
-    //fgen_init(RMT_CHANNEL_2, GPIO_18, 0.1,   true, &fparams[1]);
-    //fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
-    //fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
-
     ESP_ERROR_CHECK(fgen_start(&resource[0]));
     ESP_ERROR_CHECK(fgen_start(&resource[1]));
     ESP_ERROR_CHECK(fgen_start(&resource[2]));
@@ -88,6 +83,12 @@ void app_main(void *ignore)
     while (1) {
         ESP_LOGI(MAIN_TAG, "Forever loop (%d)", i++);
         vTaskDelay(120000 / portTICK_PERIOD_MS);
+        if(i == 4) {
+             ESP_ERROR_CHECK(fgen_stop(&resource[2]));
+        }
+        if(i == 5) {
+             ESP_ERROR_CHECK(fgen_stop(&resource[3]));
+        }
     }
     vTaskDelete(NULL);
 }

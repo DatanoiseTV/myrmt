@@ -71,7 +71,6 @@ typedef struct {
 } fgen_gpio_t;
 
 typedef struct {
-    rmt_channel_t channel;    // RMT channel number allocated
     size_t       mem_blocks;   // number of 64-item memory blocks allocated to this channel
     fgen_state_t state;         // RMT channel state
 } fgen_channel_t;
@@ -92,14 +91,14 @@ fgen_gpio_t FREQ_GPIO[FREQ_GPIO_NUM] = {
 
 
 fgen_channel_t FREQ_CHANNEL[RMT_CHANNEL_MAX] = {
-    { RMT_CHANNEL_7, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_6, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_5, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_4, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_3, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_2, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_1, 1, FGEN_CHANNEL_FREE },
-    { RMT_CHANNEL_0, 1, FGEN_CHANNEL_FREE }
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_0
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_1
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_2
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_3
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_4
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_5
+    { 1, FGEN_CHANNEL_FREE }, // RMT_CHANNEL_6
+    { 1, FGEN_CHANNEL_FREE }  // RMT_CHANNEL_7
 }; 
 
 
@@ -108,11 +107,6 @@ fgen_channel_t FREQ_CHANNEL[RMT_CHANNEL_MAX] = {
 /*                        AUXILIAR FUNCTIONS SECTION                         */
 /* ************************************************************************* */
 
-static
-uint8_t fgen_max_blocks(rmt_channel_t channel)
-{   
-    return (RMT_CHANNEL_MAX - channel);
-}
 
 static
 gpio_num_t fgen_gpio_alloc(gpio_num_t gpio_num)
@@ -123,11 +117,14 @@ gpio_num_t fgen_gpio_alloc(gpio_num_t gpio_num)
     for (int i=0; i<FREQ_GPIO_NUM; i++) {
         if (FREQ_GPIO[i].allocated == false) {
             FREQ_GPIO[i].allocated = true;
+            ESP_LOGI(FGEN_TAG,"Allocation new GPIO %d", FREQ_GPIO[i].gpio_num);
             return FREQ_GPIO[i].gpio_num;
         }
     }
     return GPIO_NUM_NC;
 }
+
+/* ------------------------------------------------------------------------- */
 
 static
 void fgen_gpio_free(gpio_num_t gpio_num)
@@ -142,6 +139,8 @@ void fgen_gpio_free(gpio_num_t gpio_num)
     return;
 }
 
+
+/* ------------------------------------------------------------------------- */
 
 // A given channel has its block and all the blocks of the
 // other upper channels if they are not already allocated 
@@ -161,26 +160,51 @@ size_t fgen_max_mem_blocks(rmt_channel_t channel)
     return sum;
 }
 
+/* ------------------------------------------------------------------------- */
+
+
 static
-int fgen_channel_alloc(size_t mem_blocks)
+rmt_channel_t fgen_channel_alloc(size_t mem_blocks)
 {
     size_t N;
-    for (rmt_channel_t i = RMT_CHANNEL_MAX-1; i>=0; i--) {
-        N = fgen_max_mem_blocks(i);
-        if  (FREQ_CHANNEL[i].state == FGEN_CHANNEL_FREE && mem_blocks <= N) {
-            FREQ_CHANNEL[i].state = FGEN_CHANNEL_USED;
-            FREQ_CHANNEL[i].mem_blocks = mem_blocks;
+    for (rmt_channel_t ch=RMT_CHANNEL_MAX-1; ch >=0; ch--) {
+        N = fgen_max_mem_blocks(ch);
+        if (FREQ_CHANNEL[ch].state == FGEN_CHANNEL_FREE && mem_blocks <= N) {
+            ESP_LOGI(FGEN_TAG,"Allocation new RMT channel %d", ch);
+            FREQ_CHANNEL[ch].state = FGEN_CHANNEL_USED;
+            FREQ_CHANNEL[ch].mem_blocks = mem_blocks;
             if (mem_blocks > 1) {
-                for ( int j = 0; j < mem_blocks; j++ ) {
-                    FREQ_CHANNEL[i+1+j].state = FGEN_CHANNEL_UNAVAILABLE;
-                    FREQ_CHANNEL[i+1+j].mem_blocks = 0;
+                mem_blocks -= 1;
+                // Marking channels > ch as unavailable because we use their memory blocks
+                for(rmt_channel_t j = ch+1; j<ch+1+mem_blocks; j++) {
+                    ESP_LOGI(FGEN_TAG,"Marking RMT channel %d as unavailable", ch);
+                    FREQ_CHANNEL[j].state = FGEN_CHANNEL_UNAVAILABLE;
+                    FREQ_CHANNEL[j].mem_blocks = 0;
                 }
             }
+            return ch;
         }
     }
-    return sum;
+    return -1;
 }
 
+/* ------------------------------------------------------------------------- */
+
+static
+void fgen_channel_free(rmt_channel_t channel)
+{
+    size_t mem_blocks;
+
+    if (FREQ_CHANNEL[channel].state == FGEN_CHANNEL_FREE || FREQ_CHANNEL[channel].state == FGEN_CHANNEL_UNAVAILABLE)
+        return;
+    ESP_LOGI(FGEN_TAG,"Freeing RMT channel %d", channel);
+    mem_blocks = FREQ_CHANNEL[channel].mem_blocks;
+    for (rmt_channel_t ch = channel; ch < channel+mem_blocks; ch++) {
+        ESP_LOGI(FGEN_TAG,"Also freeing adjacent RMT channel %d", ch);
+        FREQ_CHANNEL[ch].state = FGEN_CHANNEL_FREE;
+        FREQ_CHANNEL[ch].mem_blocks = 1;
+    }
+}
 
 
 // Find two fgen N and Prescaler so that
@@ -405,68 +429,13 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 
 /* -------------------------------------------------------------------------- */
 
-static 
-esp_err_t fgen_allocate2(fgen_params_t* fgen)
-{
-    // Allocate memory and fill it with pattern
-    fgen->items      = (rmt_item32_t*) calloc(fgen->nitems, sizeof(rmt_item32_t));
-    FGEN_CHECK(fgen->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
-
-    // Generate the pattern and repeat it as much as we can within a 64 -item block
-    rmt_item32_t* p = fgen->items;
-    for(int i = 0 ; i<fgen->nrep; i++) {
-        p = fgen_fill_items(p, fgen->NH, fgen->NL);
-    }
-    p->val = 0; // mark end of sequence
-    fgen_print_items(fgen->items, fgen->nitems);
-    return ESP_OK;
-}
-
-/* -------------------------------------------------------------------------- */
-
-static 
-esp_err_t fgen_config2(double Fout, double duty_cycle, bool allocate, fgen_params_t* fgen)
-{
-
-    double jitter;
-
-    // Decompose Frequency into the product of 2 factors: prescaler and N
-    // Decompose N into NH and NL taking into account dyty cycle
-    fgen_find_freq(Fout, duty_cycle, fgen);
-    fgen_log_params(Fout, duty_cycle, fgen);
- 
-    // See how many RMT 32-bit items needs this frequency generation
-    // How many channes does it take and how many repetitions withon a channel
-    // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
-
-    fgen->onitems = fgen_count_items(fgen->NH, fgen->NL);  // without EoTx
-    fgen->mem_blocks = (fgen->onitems > 0 ) ? 1 + (fgen->onitems / 64) : 0;
-    // if only 1 memory block, make it double
-    fgen->mem_blocks = (fgen->mem_blocks == 1 ) ? 2 : fgen->mem_blocks;
-    
-    fgen->nrep       = (fgen->mem_blocks * 63) / fgen->onitems;
-    jitter = 1/((double)(fgen->N) * fgen->nrep);
-
-    FGEN_CHECK(fgen->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", fgen->onitems, fgen->mem_blocks);
-    ESP_LOGI(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",fgen->nrep);
-    ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
-
-    fgen->nitems     = fgen->onitems * fgen->nrep + 1; // global array size including final EoTx
-    if (!allocate ) {
-        fgen->items = NULL;
-        return ESP_OK;
-    }
-    
-    return fgen_allocate2(fgen);
-}
 
 /* ************************************************************************* */
 /*                               API FUNCTIONS                               */
 /* ************************************************************************* */
 
 
-esp_err_t fgen_config(double freq, double duty_cycle, fgen_params_t* fparams)
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_params_t* fparams)
 {
     double jitter;
 
@@ -495,14 +464,17 @@ esp_err_t fgen_config(double freq, double duty_cycle, fgen_params_t* fparams)
 
 esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res)
 {
+    esp_err_t ret;
+
+    // Allocate a free GPIO pin
+    res->gpio_num   = fgen_gpio_alloc(gpio_num);
+    FGEN_CHECK(res->gpio_num != GPIO_NUM_NC, "No Free GPIO",  ESP_ERR_NO_MEM);
+
     // Allocate memory and fill it with pattern
-    
     res->nitems     = fparams->nitems;
     res->mem_blocks = fparams->mem_blocks;
     res->items      = (rmt_item32_t*) calloc(res->nitems, sizeof(rmt_item32_t));
     FGEN_CHECK(res->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
-    res->gpio_num   = fgen_gpio_alloc(gpio_num);
-
     // Generate the pattern and repeat it as much as we can within a 64 -item block
     rmt_item32_t* p = res->items;
     for(int i = 0 ; i<fparams->nrep; i++) {
@@ -511,9 +483,14 @@ esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_
     p->val = 0; // mark end of sequence
     fgen_print_items(res->items, res->nitems);
 
+    // Allocate a free RMT channel
+    res->channel = fgen_channel_alloc(res->mem_blocks);
+    FGEN_CHECK(res->channel != -1, "No Free RMT channel",  ESP_ERR_NO_MEM);
+
+    // Configure and load the RMT driver
     rmt_config_t config = {
         // Common config
-        .channel              = channel,
+        .channel              = res->channel,
         .rmt_mode             = RMT_MODE_TX,
         .gpio_num             = res->gpio_num,
         .mem_block_num        = fparams->mem_blocks,
@@ -542,61 +519,18 @@ esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_
     
 }
 
+/* -------------------------------------------------------------------------- */
 
-
-
-
-
-
-/*
- * Initialize a RMT Tx channel
- */
-esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq, bool allocate, fgen_params_t* fparams)
+esp_err_t fgen_start(rmt_channel_t channel)
 {
-   
-    esp_err_t ret;
-
-    ret = fgen_config2(freq, 0.5, allocate, fparams);
-    FGEN_CHECK(ret == ESP_OK, "Error calculating frequency generator parameters",  ret);
-    if (! allocate )
-        return ESP_OK;
-
-    rmt_config_t config = {
-        // Common config
-        .channel              = channel,
-        .rmt_mode             = RMT_MODE_TX,
-        .gpio_num             = gpio_num,
-        .mem_block_num        = fparams->mem_blocks,
-        .clk_div              = fparams->prescaler,
-        // Tx only config
-        .tx_config.loop_en    = true,
-        .tx_config.carrier_en = false,
-        .tx_config.idle_level = RMT_IDLE_LEVEL_LOW,
-        .tx_config.idle_output_en = false
-    };
-
-    ret = rmt_config(&config);
-    FGEN_CHECK(ret == ESP_OK, "Error configure RMT module",  ret);
-
-    ret = rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
-    FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
-
-    // Copy the pattern we've just generated to the internal RMT buffers
-    ret = rmt_fill_tx_items(config.channel, fparams->items, fparams->nitems, 0);
-    FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
-
-    // we no longer need the allocated memory, since we copied the sequence 
-    // to the RMT buffers
-    free(fparams->items);
-    fparams->items = NULL;
-
-    return ESP_OK;
+    return rmt_tx_start(channel, true);
 }
 
 /* -------------------------------------------------------------------------- */
 
-esp_err_t fgen_start(uint8_t channel)
+esp_err_t fgen_stop(rmt_channel_t channel)
 {
-    return rmt_tx_start(channel, true);
+    return rmt_tx_stop(channel);
 }
+
 

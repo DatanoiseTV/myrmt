@@ -65,25 +65,15 @@ typedef struct {
 /*                               API FUNCTIONS                               */
 /* ************************************************************************* */
 
-esp_err_t fgen_config(double freq, double duty_cycle, fgen_params_t* fparams);
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_params_t* fparams);
 
 esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res);
 
-esp_err_t fgen_stop(uint8_t channel);
-
 esp_err_t fgen_free(const fgen_params_t* fparams, fgen_resources_t* res);
 
+esp_err_t fgen_start(rmt_channel_t channel);
 
-
-
-/*
- * Initialize a RMT Tx channel
- */
-esp_err_t fgen_init(uint8_t channel, uint8_t gpio_num, double freq, bool allocate, fgen_params_t* fparams);
-
-/* -------------------------------------------------------------------------- */
-
-esp_err_t fgen_start(uint8_t channel);
+esp_err_t fgen_stop(rmt_channel_t channel);
 
 
 

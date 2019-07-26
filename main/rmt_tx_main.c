@@ -61,7 +61,7 @@
 void app_main(void *ignore)
 {
     int i = 1;
-    fgen_params_t    fparams[4];
+    fgen_info_t    fparams[4];
     fgen_resources_t resource[4];
 
     ESP_LOGI(MAIN_TAG, "Configuring transmitters");
@@ -80,10 +80,10 @@ void app_main(void *ignore)
     //fgen_init(RMT_CHANNEL_4, GPIO_19, 1.0,   true, &fparams[2]);
     //fgen_init(RMT_CHANNEL_6, GPIO_21, 50012, true, &fparams[3]);
 
-    ESP_ERROR_CHECK(fgen_start(resource[0].channel));
-    ESP_ERROR_CHECK(fgen_start(resource[1].channel));
-    ESP_ERROR_CHECK(fgen_start(resource[2].channel));
-    ESP_ERROR_CHECK(fgen_start(resource[3].channel));
+    ESP_ERROR_CHECK(fgen_start(&resource[0]));
+    ESP_ERROR_CHECK(fgen_start(&resource[1]));
+    ESP_ERROR_CHECK(fgen_start(&resource[2]));
+    ESP_ERROR_CHECK(fgen_start(&resource[3]));
 
     while (1) {
         ESP_LOGI(MAIN_TAG, "Forever loop (%d)", i++);

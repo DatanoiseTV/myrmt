@@ -32,14 +32,6 @@ extern "C" {
 /* ************************************************************************* */
 
 typedef struct {
-    rmt_item32_t* items;      // Array of RMT items including EoTx
-    size_t        nitems;     // number of RMT items in the array, including EoTx
-    gpio_num_t    gpio_num;   // GPIO pin allocated to this frequency generator
-    rmt_channel_t channel;    // Allocated RMT channel
-    uint8_t       mem_blocks; // number of memory blocks consumed (1 block = 64 RMT items)
-} fgen_resources_t;
-
-typedef struct {
     double        freq;       // real frequency after adjustment (Hz)
     double        duty_cycle; // duty cycle after adjustments (0 < x < 1)
     rmt_item32_t* items;      // Array of RMT items including EoTx
@@ -51,7 +43,16 @@ typedef struct {
     uint32_t      N;          // Big divisor to decompose in items (internal value)
     uint32_t      NH;         // The high level part of N (N = NH + NL)
     uint32_t      NL;         // The low level part of N  (N = NH + NL)
-} fgen_params_t;
+} fgen_info_t;
+
+
+
+typedef struct {
+    rmt_item32_t* items;      // Array of RMT items including EoTx
+    gpio_num_t    gpio_num;   // GPIO pin allocated to this frequency generator
+    rmt_channel_t channel;    // Allocated RMT channel
+    fgen_info_t   info;       // detailed info about the frequency generator
+} fgen_resources_t;
 
 
 
@@ -65,15 +66,15 @@ typedef struct {
 /*                               API FUNCTIONS                               */
 /* ************************************************************************* */
 
-esp_err_t fgen_info(double freq, double duty_cycle, fgen_params_t* fparams);
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* fparams);
 
-esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res);
+esp_err_t fgen_allocate(const fgen_info_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res);
 
-esp_err_t fgen_free(const fgen_params_t* fparams, fgen_resources_t* res);
+esp_err_t fgen_free(const fgen_info_t* fparams, fgen_resources_t* res);
 
-esp_err_t fgen_start(rmt_channel_t channel);
+esp_err_t fgen_start(fgen_resources_t* res);
 
-esp_err_t fgen_stop(rmt_channel_t channel);
+esp_err_t fgen_stop(fgen_resources_t* res);
 
 
 

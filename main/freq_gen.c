@@ -212,7 +212,7 @@ void fgen_channel_free(rmt_channel_t channel)
 // being Prescaler and N both integers
 
 static 
-esp_err_t fgen_find_freq(double fout, double duty_cycle, fgen_params_t* fgen)
+esp_err_t fgen_find_freq(double fout, double duty_cycle, fgen_info_t* fgen)
 {
 
     double whole; 
@@ -410,7 +410,7 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 /* -------------------------------------------------------------------------- */
 
 static 
-void fgen_log_params(double Fout, double duty_cycle, fgen_params_t* fgen)
+void fgen_log_params(double Fout, double duty_cycle, fgen_info_t* fgen)
 {
     double Tclk, ErrFreq, Errduty_cycle;
 
@@ -435,7 +435,7 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_params_t* fgen)
 /* ************************************************************************* */
 
 
-esp_err_t fgen_info(double freq, double duty_cycle, fgen_params_t* fparams)
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* fparams)
 {
     double jitter;
 
@@ -462,29 +462,30 @@ esp_err_t fgen_info(double freq, double duty_cycle, fgen_params_t* fparams)
     return ESP_OK;
 }
 
-esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res)
+/* -------------------------------------------------------------------------- */
+
+esp_err_t fgen_allocate(const fgen_info_t* fparams, gpio_num_t gpio_num, fgen_resources_t* res)
 {
     esp_err_t ret;
+
+    res->info = *fparams;   // copy structure
 
     // Allocate a free GPIO pin
     res->gpio_num   = fgen_gpio_alloc(gpio_num);
     FGEN_CHECK(res->gpio_num != GPIO_NUM_NC, "No Free GPIO",  ESP_ERR_NO_MEM);
 
-    // Allocate memory and fill it with pattern
-    res->nitems     = fparams->nitems;
-    res->mem_blocks = fparams->mem_blocks;
-    res->items      = (rmt_item32_t*) calloc(res->nitems, sizeof(rmt_item32_t));
+    res->items      = (rmt_item32_t*) calloc(res->info.nitems, sizeof(rmt_item32_t));
     FGEN_CHECK(res->items != NULL, "Out of memory allocating RMT items",  ESP_ERR_NO_MEM);
     // Generate the pattern and repeat it as much as we can within a 64 -item block
     rmt_item32_t* p = res->items;
-    for(int i = 0 ; i<fparams->nrep; i++) {
-        p = fgen_fill_items(p, fparams->NH, fparams->NL);
+    for(int i = 0 ; i<res->info.nrep; i++) {
+        p = fgen_fill_items(p, res->info.NH, res->info.NL);
     }
     p->val = 0; // mark end of sequence
-    fgen_print_items(res->items, res->nitems);
+    fgen_print_items(res->items, res->info.nitems);
 
     // Allocate a free RMT channel
-    res->channel = fgen_channel_alloc(res->mem_blocks);
+    res->channel = fgen_channel_alloc(res->info.mem_blocks);
     FGEN_CHECK(res->channel != -1, "No Free RMT channel",  ESP_ERR_NO_MEM);
 
     // Configure and load the RMT driver
@@ -493,8 +494,8 @@ esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_
         .channel              = res->channel,
         .rmt_mode             = RMT_MODE_TX,
         .gpio_num             = res->gpio_num,
-        .mem_block_num        = fparams->mem_blocks,
-        .clk_div              = fparams->prescaler,
+        .mem_block_num        = res->info.mem_blocks,
+        .clk_div              = res->info.prescaler,
         // Tx only config
         .tx_config.loop_en    = true,
         .tx_config.carrier_en = false,
@@ -521,16 +522,18 @@ esp_err_t fgen_allocate(const fgen_params_t* fparams, gpio_num_t gpio_num, fgen_
 
 /* -------------------------------------------------------------------------- */
 
-esp_err_t fgen_start(rmt_channel_t channel)
+esp_err_t fgen_start(fgen_resources_t* res)
 {
-    return rmt_tx_start(channel, true);
+    ESP_LOGI(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    return rmt_tx_start(res->channel, true);
 }
 
 /* -------------------------------------------------------------------------- */
 
-esp_err_t fgen_stop(rmt_channel_t channel)
+esp_err_t fgen_stop(fgen_resources_t* res)
 {
-    return rmt_tx_stop(channel);
+    ESP_LOGI(FGEN_TAG, "Stopping RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    return rmt_tx_stop(res->channel);
 }
 
 

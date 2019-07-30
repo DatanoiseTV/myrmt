@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := rmt_tx
+PROJECT_NAME := freq_gen
 
 include $(IDF_PATH)/make/project.mk
 

@@ -30,7 +30,7 @@
 // Local includes
 // --------------
 
-#include "freq_gen.h"
+#include "freq_generator.h"
 
 /* ************************************************************************* */
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
@@ -117,7 +117,7 @@ gpio_num_t fgen_gpio_alloc(gpio_num_t gpio_num)
     for (int i=0; i<FREQ_GPIO_NUM; i++) {
         if (FREQ_GPIO[i].allocated == false) {
             FREQ_GPIO[i].allocated = true;
-            ESP_LOGI(FGEN_TAG,"Allocation new GPIO %d", FREQ_GPIO[i].gpio_num);
+            ESP_LOGD(FGEN_TAG,"Allocation new GPIO %d", FREQ_GPIO[i].gpio_num);
             return FREQ_GPIO[i].gpio_num;
         }
     }
@@ -170,14 +170,14 @@ rmt_channel_t fgen_channel_alloc(size_t mem_blocks)
     for (rmt_channel_t ch=RMT_CHANNEL_MAX-1; ch >=0; ch--) {
         N = fgen_max_mem_blocks(ch);
         if (FREQ_CHANNEL[ch].state == FGEN_CHANNEL_FREE && mem_blocks <= N) {
-            ESP_LOGI(FGEN_TAG,"Allocation new RMT channel %d", ch);
+            ESP_LOGD(FGEN_TAG,"Allocation new RMT channel %d", ch);
             FREQ_CHANNEL[ch].state = FGEN_CHANNEL_USED;
             FREQ_CHANNEL[ch].mem_blocks = mem_blocks;
             if (mem_blocks > 1) {
                 mem_blocks -= 1;
                 // Marking channels > ch as unavailable because we use their memory blocks
                 for(rmt_channel_t j = ch+1; j<ch+1+mem_blocks; j++) {
-                    ESP_LOGI(FGEN_TAG,"Marking RMT channel %d as unavailable", j);
+                    ESP_LOGD(FGEN_TAG,"Marking RMT channel %d as unavailable", j);
                     FREQ_CHANNEL[j].state = FGEN_CHANNEL_UNAVAILABLE;
                     FREQ_CHANNEL[j].mem_blocks = 0;
                 }
@@ -197,10 +197,10 @@ void fgen_channel_free(rmt_channel_t channel)
 
     if (FREQ_CHANNEL[channel].state == FGEN_CHANNEL_FREE || FREQ_CHANNEL[channel].state == FGEN_CHANNEL_UNAVAILABLE)
         return;
-    ESP_LOGI(FGEN_TAG,"Freeing RMT channel %d", channel);
+    ESP_LOGD(FGEN_TAG,"Freeing RMT channel %d", channel);
     mem_blocks = FREQ_CHANNEL[channel].mem_blocks;
     for (rmt_channel_t ch = channel; ch < channel+mem_blocks; ch++) {
-        ESP_LOGI(FGEN_TAG,"Also freeing adjacent RMT channel %d", ch);
+        ESP_LOGD(FGEN_TAG,"Also freeing adjacent RMT channel %d", ch);
         FREQ_CHANNEL[ch].state = FGEN_CHANNEL_FREE;
         FREQ_CHANNEL[ch].mem_blocks = 1;
     }
@@ -378,7 +378,7 @@ rmt_item32_t* fgen_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t NL)
 }
 
 /* -------------------------------------------------------------------------- */
-   
+
 static 
 void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 {
@@ -388,10 +388,10 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
     uint32_t rem  = N % NN;
     uint32_t row, offset, i, j;
 
-    ESP_LOGI(FGEN_TAG,"Displaying %d items + EoTx", N-1);
-    ESP_LOGI(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
-
-    printf("-----------------------------------------------------\n");
+    ESP_LOGD(FGEN_TAG,"Displaying %d items + EoTx", N-1);
+    ESP_LOGD(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
+#if LOG_LOCAL_LEVEL == ESP_LOG_DEBUG
+    printf("-------------------------------------------------------------------\n");
     for (row = 0; row < rows; row++) {
         for (i=0; i<NN; i++) {
             offset = NN*row+i;
@@ -404,7 +404,8 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
         printf("{{{%d,%d,%d,%d}}},\t", p[offset].duration0, p[offset].level0, p[offset].duration1, p[offset].level1);
     }
     if (rem) printf("\n");
-    printf("-----------------------------------------------------\n");
+    printf("-------------------------------------------------------------------\n");
+#endif
 }
 
 /* -------------------------------------------------------------------------- */
@@ -422,9 +423,9 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_info_t* fgen)
     Errduty_cycle    = (fgen->duty_cycle - duty_cycle)/duty_cycle; 
     Tclk             = (double) fgen->prescaler / FGEN_APB;
 
-    ESP_LOGI(FGEN_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FGEN_APB, fgen->prescaler, 1/Tclk);    
-    ESP_LOGI(FGEN_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", fgen->N, fgen->NH, fgen->NL);
-    ESP_LOGI(FGEN_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, fgen->freq, ErrFreq*100, duty_cycle*100, fgen->duty_cycle*100, Errduty_cycle*100);
+    ESP_LOGD(FGEN_TAG,"Ref Clock = %.0f Hz, Prescaler = %d, RMT Clock = %.2f Hz", FGEN_APB, fgen->prescaler, 1/Tclk);    
+    ESP_LOGD(FGEN_TAG,"Ntot = %d, Nhigh = %d, Nlow = %d", fgen->N, fgen->NH, fgen->NL);
+    ESP_LOGD(FGEN_TAG,"Fout = %.3f Hz => %.3f Hz (%.2f%%), Duty Cycle = %.2f%% => %.2f%% (%.2f%%)", Fout, fgen->freq, ErrFreq*100, duty_cycle*100, fgen->duty_cycle*100, Errduty_cycle*100);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -454,9 +455,9 @@ esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
     jitter = 1/((double)(info->N) * info->nrep);
 
     FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGI(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
-    ESP_LOGI(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
-    ESP_LOGI(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
+    ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
+    ESP_LOGD(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
+    ESP_LOGD(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
 
     info->nitems     = info->onitems * info->nrep + 1; // global array size including final EoTx
     return ESP_OK;
@@ -533,7 +534,7 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
 
 esp_err_t fgen_start(fgen_resources_t* res)
 {
-    ESP_LOGI(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    ESP_LOGD(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
     return rmt_tx_start(res->channel, true);
 }
 
@@ -541,7 +542,7 @@ esp_err_t fgen_start(fgen_resources_t* res)
 
 esp_err_t fgen_stop(fgen_resources_t* res)
 {
-    ESP_LOGI(FGEN_TAG, "Stopping RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    ESP_LOGD(FGEN_TAG, "Stopping RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
     return rmt_tx_stop(res->channel);
 }
 

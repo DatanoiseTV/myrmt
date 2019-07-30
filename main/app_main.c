@@ -29,7 +29,8 @@
 // Local includes
 // --------------
 
-#include "freq_gen.h"
+#include "freq_generator.h"
+#include "freq_console.h"
 
 
 /* ************************************************************************* */
@@ -64,7 +65,7 @@ void app_main(void *ignore)
     fgen_info_t    fparams[4];
     fgen_resources_t resource[4];
 
-    ESP_LOGI(MAIN_TAG, "Configuring transmitters");
+    ESP_LOGD(MAIN_TAG, "Configuring transmitters");
     fgen_info( 50012, 0.5, &fparams[0]);
     fgen_info( 1.0,   0.5, &fparams[1]);
     fgen_info( 0.1,   0.5, &fparams[2]);
@@ -80,15 +81,8 @@ void app_main(void *ignore)
     ESP_ERROR_CHECK(fgen_start(&resource[2]));
     ESP_ERROR_CHECK(fgen_start(&resource[3]));
 
-    while (1) {
-        ESP_LOGI(MAIN_TAG, "Forever loop (%d)", i++);
-        vTaskDelay(120000 / portTICK_PERIOD_MS);
-        if(i == 4) {
-             ESP_ERROR_CHECK(fgen_stop(&resource[2]));
-        }
-        if(i == 5) {
-             ESP_ERROR_CHECK(fgen_stop(&resource[3]));
-        }
-    }
+    freq_console_init();
+    freq_console_loop();
+
     vTaskDelete(NULL);
 }

@@ -82,6 +82,12 @@ static const char* state_msg(fgen_resources_t* fgen)
     return msg[state];
 }
 
+static void print_fgen_summary(fgen_resources_t* fgen)
+{
+    printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
+                fgen->channel, state_msg(fgen), fgen->gpio_num, fgen->info.freq, fgen->info.mem_blocks);
+}
+
 /* ************************************************************************* */
 /*                     COMMAND IMPLEMENTATION SECTION                        */
 /* ************************************************************************* */
@@ -209,12 +215,8 @@ static int exec_create(int argc, char **argv)
     fgen = fgen_alloc(&info, create_args.gpio_num->ival[0] );
     if (fgen != NULL) {
         register_fgen(fgen); 
-        printf("------------------------------------------------------------------\n");
-        printf("                   FREQUENCY GENERATOR CREATED                    \n");
-        printf("Channel:\t\t%d\n", fgen->channel);
-        printf("GPIO:\t\t\t%d\n", fgen->gpio_num);
-        printf("Frequency:\t%0.4f Hz\t\tDuty Cycle:\t%0.2f%%\n", fgen->info.freq, fgen->info.duty_cycle*100);
-        printf("------------------------------------------------------------------\n");
+        printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
+                fgen->channel, state_msg(fgen), fgen->gpio_num, fgen->info.freq, fgen->info.mem_blocks);
     } else {
         printf("NO RESOURCES AVAILABLE TO CREATE A NEW FREQUENCY GENERATOR\n");
     }
@@ -320,8 +322,7 @@ static int exec_list(int argc, char **argv)
     for (rmt_channel_t channel = 0; channel<RMT_CHANNEL_MAX ; channel++) {
          fgen = search_fgen(channel);
         if (fgen != NULL) {
-            printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
-                fgen->channel, state_msg(fgen), fgen->gpio_num, fgen->info.freq, fgen->info.mem_blocks);
+            print_fgen_summary(fgen);
             if (list_args.extended->count) {
                 printf("\tPrescaler: %03d, N: %d (%d + %d)\n", 
                 fgen->info.prescaler, fgen->info.N, fgen->info.NH, fgen->info.NL);
@@ -377,11 +378,7 @@ static int exec_start(int argc, char **argv)
     if (fgen != NULL) {
        fgen_start(fgen);
     }  
-
-    printf("------------------------------------------------------------------\n");
-    printf("                   FREQUENCY GENERATOR STARTED                    \n");
-    printf("Channel: %02d\tGPIO: %02d\tFreq.: %0.2f Hz\n", fgen->channel, fgen->gpio_num, fgen->info.freq);
-    printf("------------------------------------------------------------------\n");
+    print_fgen_summary(fgen);
     return 0;
 }
 
@@ -430,11 +427,7 @@ static int exec_stop(int argc, char **argv)
     if (fgen != NULL) {
        fgen_stop(fgen);
     }  
-
-    printf("------------------------------------------------------------------\n");
-    printf("                   FREQUENCY GENERATOR STOPPED                    \n");
-    printf("Channel: %02d\tGPIO: %02d\tFreq.: %0.2f Hz\n", fgen->channel, fgen->gpio_num, fgen->info.freq);
-    printf("------------------------------------------------------------------\n");
+    print_fgen_summary(fgen);
     return 0;
 }
 

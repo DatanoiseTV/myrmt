@@ -520,8 +520,8 @@ esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
     info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
     info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
     info->nrep       = (info->mem_blocks * 63) / info->onitems;
-    info->jitter     = 1000 * info->prescaler / FGEN_APB;   
-    
+    info->jitter     = info->prescaler / FGEN_APB;   
+
     FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
     ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
     ESP_LOGD(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);

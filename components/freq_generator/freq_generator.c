@@ -390,7 +390,7 @@ void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 
     ESP_LOGD(FGEN_TAG,"Displaying %d items + EoTx", N-1);
     ESP_LOGD(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
-#if LOG_LOCAL_LEVEL == ESP_LOG_DEBUG
+#if LOG_LOCAL_LEVEL > ESP_LOG_INFO
     printf("-------------------------------------------------------------------\n");
     for (row = 0; row < rows; row++) {
         for (i=0; i<NN; i++) {
@@ -431,40 +431,6 @@ void fgen_log_params(double Fout, double duty_cycle, fgen_info_t* fgen)
 /* -------------------------------------------------------------------------- */
 
 
-/* ************************************************************************* */
-/*                               API FUNCTIONS                               */
-/* ************************************************************************* */
-
-
-esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
-{
-    double jitter;
-
-    // Decompose Frequency into the product of 2 factors: prescaler and N
-    // Decompose N into NH and NL taking into account dyty cycle
-    fgen_find_freq(freq,  duty_cycle, info);
-    fgen_log_params(freq, duty_cycle, info);
- 
-    // See how many RMT 32-bit items needs this frequency generation
-    // How many channes does it take and how many repetitions withon a channel
-    // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
-
-    info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
-    info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
-    info->nrep       = (info->mem_blocks * 63) / info->onitems;
-    jitter = 1/((double)(info->N) * info->nrep);
-
-    FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
-    ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
-    ESP_LOGD(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
-    ESP_LOGD(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
-
-    info->nitems     = info->onitems * info->nrep + 1; // global array size including final EoTx
-    return ESP_OK;
-}
-
-/* -------------------------------------------------------------------------- */
-
 static
 void fgen_waveform(fgen_resources_t* res)
 {
@@ -478,11 +444,13 @@ void fgen_waveform(fgen_resources_t* res)
 }
 /* -------------------------------------------------------------------------- */
 
+static
 esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resources_t* res)
 {
     esp_err_t ret;
 
-    res->info = *info;   // copy structure
+    res->info = *info;      // copy structure
+    res->started = false;   // Not started
 
     // Allocate a free GPIO pin
     res->gpio_num   = fgen_gpio_alloc(gpio_num);
@@ -521,6 +489,10 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
     ret = rmt_fill_tx_items(config.channel, res->items, info->nitems, 0);
     FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
 
+    // This is a needed hack for Tx looping since the rmt_config does not do it.
+    ret = rmt_set_tx_intr_en(config.channel, false);
+    FGEN_CHECK(ret == ESP_OK, "Error disabling RMT Tx interrupt",  ret);
+
     // we no longer need the allocated memory, since we copied the sequence 
     // to the RMT buffers
     free(res->items);
@@ -530,11 +502,72 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
     
 }
 
+/* ************************************************************************* */
+/*                               API FUNCTIONS                               */
+/* ************************************************************************* */
+
+
+esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
+{
+    double jitter;
+
+    // Decompose Frequency into the product of 2 factors: prescaler and N
+    // Decompose N into NH and NL taking into account dyty cycle
+    fgen_find_freq(freq,  duty_cycle, info);
+    fgen_log_params(freq, duty_cycle, info);
+ 
+    // See how many RMT 32-bit items needs this frequency generation
+    // How many channes does it take and how many repetitions withon a channel
+    // to minimize wraparround jitter (1 Tclk delay is introduced by wraparound)
+
+    info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
+    info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
+    info->nrep       = (info->mem_blocks * 63) / info->onitems;
+    jitter = 1/((double)(info->N) * info->nrep);
+
+    FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
+    ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
+    ESP_LOGD(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
+    ESP_LOGD(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
+
+    info->nitems     = info->onitems * info->nrep + 1; // global array size including final EoTx
+    return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+
+fgen_resources_t* fgen_alloc(const fgen_info_t* info, gpio_num_t gpio_num)
+{
+    fgen_resources_t* resources;
+    esp_err_t ret;
+
+    resources = (fgen_resources_t*) calloc(1, sizeof(fgen_resources_t));
+    FGEN_CHECK(resources != NULL, "Out of memory allocating Resources RAM",  NULL); 
+
+    ret = fgen_allocate(info, gpio_num, resources);
+    if (ret != ESP_OK) {
+        free(resources);
+        return NULL;
+    }
+    return resources;
+}
+
+/* -------------------------------------------------------------------------- */
+
+void fgen_free(fgen_resources_t* res)
+{
+    fgen_channel_free(res->channel);
+    fgen_gpio_free(res->gpio_num);
+    rmt_driver_uninstall(res->channel);
+    free(res);
+}
+
 /* -------------------------------------------------------------------------- */
 
 esp_err_t fgen_start(fgen_resources_t* res)
 {
     ESP_LOGD(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    res->started = true;
     return rmt_tx_start(res->channel, true);
 }
 
@@ -543,6 +576,7 @@ esp_err_t fgen_start(fgen_resources_t* res)
 esp_err_t fgen_stop(fgen_resources_t* res)
 {
     ESP_LOGD(FGEN_TAG, "Stopping RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+    res->started = false;
     return rmt_tx_stop(res->channel);
 }
 

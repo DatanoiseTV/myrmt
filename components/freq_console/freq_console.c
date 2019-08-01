@@ -13,14 +13,19 @@ extern "C" {
 // Expressif SDK-IDF standard includes
 // -----------------------------------
 
-#include "esp_system.h"
-#include "esp_log.h"
-#include "esp_console.h"
-#include "esp_vfs_dev.h"
-#include "driver/uart.h"
-#include "linenoise/linenoise.h"
-#include "argtable3/argtable3.h"
+#include <esp_system.h>
+#include <esp_log.h>
+#include <esp_console.h>
+#include <esp_vfs_dev.h>
+#include <driver/uart.h>
+#include <linenoise/linenoise.h>
+#include <argtable3/argtable3.h>
 
+// --------------
+// Local includes
+// --------------
+
+#include "freq_commands.h"
 
 /* ************************************************************************* */
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
@@ -93,6 +98,9 @@ void freq_console_init()
 
     /* Set command history size */
     linenoiseHistorySetMaxLen(100);
+
+    /* and finally register custom commands */
+    freq_cmds_register();
 }
 
 void freq_console_loop()

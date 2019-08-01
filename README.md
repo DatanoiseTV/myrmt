@@ -3,7 +3,7 @@
 This example will shows how to configure and operate the remote control (RMT) peripheral to turn it into a programmable square frequency generator.
 
 
-### Configure the Project
+# Configure the Project
 
 ```
 make menuconfig
@@ -11,7 +11,7 @@ make menuconfig
 
 * Set serial port under Serial Flasher Options.
 
-### Build and Flash
+# Build and Flash
 
 Build the project and flash it to the board, then run monitor tool to view serial output:
 
@@ -23,12 +23,30 @@ make -j4 flash monitor
 
 See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for full steps to configure and use ESP-IDF to build projects.
 
+## Commands
 
-## Issues
+1. Compute the frequency generator parameters as well as the needed resouces. 
+Does not create a frequency generator
+
+params [-f | --freq <freq>] [-d | --duty <duty_cycle>]
+
+2. Create a frequency generator bound to a GPIO pin but does not start it
+
+create [-f | --freq <freq>] [-d | --duty <duty_cycle>] [ -g | --gpio ]
+
+3. Starts frequency generator given by channel id (0-7)
+
+start [-c | --channel]
+
+4. Stops frequency generator given by channel id (0-7)
+
+stop  [-c | --channel]
+
+5. Delete Frequency generator given by channel id (0-7) and frees resources, including GPIO pin.
+
+delete [-c | --channel]
+
+# Issues
 
 * WHen the number of items is exactly 64, 128, etc (including final EoTx zero mark), the wavefrom is generated only once
 and then it stops
-
-* There is a significant delay (200ms) when loop is enabled.
-
-For any technical queries, please open an [issue] (https://github.com/espressif/esp-idf/issues) on GitHub. We will get back to you soon.

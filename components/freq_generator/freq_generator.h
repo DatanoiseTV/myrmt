@@ -34,6 +34,7 @@ extern "C" {
 typedef struct {
     double        freq;       // real frequency after adjustment (Hz)
     double        duty_cycle; // duty cycle after adjustments (0 < x < 1)
+    double        jitter;     // jitter due to wraparound delay (msecs)
     size_t        onitems;    // original items sequence length without duplication nor  EoTx
     size_t        nitems;     // number of RMT items including duplication and EoTx mark
     uint8_t       nrep;       // how many times the items sequence is being repeated (1 < nrep)

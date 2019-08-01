@@ -508,8 +508,6 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
 
 esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
 {
-    double jitter;
-
     // Decompose Frequency into the product of 2 factors: prescaler and N
     // Decompose N into NH and NL taking into account dyty cycle
     fgen_find_freq(freq,  duty_cycle, info);
@@ -522,12 +520,12 @@ esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
     info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
     info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
     info->nrep       = (info->mem_blocks * 63) / info->onitems;
-    jitter = 1/((double)(info->N) * info->nrep);
-
+    info->jitter     = 1000 * info->prescaler / FGEN_APB;   
+    
     FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
     ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
     ESP_LOGD(FGEN_TAG,"This sequence can be duplicated %d times + final EoTx (0,0,0,0)",info->nrep);
-    ESP_LOGD(FGEN_TAG,"Loop jitter %.02f%%", jitter*100);
+    ESP_LOGD(FGEN_TAG,"Loop jitter %.02f (ms)", info->jitter);
 
     info->nitems     = info->onitems * info->nrep + 1; // global array size including final EoTx
     return ESP_OK;
@@ -583,7 +581,7 @@ esp_err_t fgen_stop(fgen_resources_t* res)
 static esp_err_t rmt_tx_get_state(rmt_channel_t channel, uint32_t* state)
 {
     extern rmt_dev_t RMT;
-    
+
     FGEN_CHECK(channel < RMT_CHANNEL_MAX, "RMT CHANNEL ERR", ESP_ERR_INVALID_ARG);
     *state = RMT.conf_ch[channel].conf1.tx_start;
    return ESP_OK;

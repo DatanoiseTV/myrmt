@@ -50,7 +50,6 @@ typedef struct {
     gpio_num_t    gpio_num;   // Allocated GPIO pin for this frequency generator
     rmt_channel_t channel;    // Allocated RMT channel
     fgen_info_t   info;       // detailed info about the frequency generator
-    bool          started;    // state flag (true if started)
 } fgen_resources_t;
 
 
@@ -75,7 +74,7 @@ esp_err_t fgen_start(fgen_resources_t* res);
 
 esp_err_t fgen_stop(fgen_resources_t* res);
 
-
+rmt_channel_status_t fgen_get_state(const fgen_resources_t* res);
 
 
 #ifdef __cplusplus

@@ -450,8 +450,7 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
     esp_err_t ret;
 
     res->info = *info;      // copy structure
-    res->started = false;   // Not started
-
+   
     // Allocate a free GPIO pin
     res->gpio_num   = fgen_gpio_alloc(gpio_num);
     FGEN_CHECK(res->gpio_num != GPIO_NUM_NC, "No Free GPIO",  ESP_ERR_NO_MEM);
@@ -567,7 +566,6 @@ void fgen_free(fgen_resources_t* res)
 esp_err_t fgen_start(fgen_resources_t* res)
 {
     ESP_LOGD(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
-    res->started = true;
     return rmt_tx_start(res->channel, true);
 }
 
@@ -576,8 +574,29 @@ esp_err_t fgen_start(fgen_resources_t* res)
 esp_err_t fgen_stop(fgen_resources_t* res)
 {
     ESP_LOGD(FGEN_TAG, "Stopping RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
-    res->started = false;
     return rmt_tx_stop(res->channel);
 }
 
+/* -------------------------------------------------------------------------- */
 
+// this should probably fo into the Espressif SDK
+static esp_err_t rmt_tx_get_state(rmt_channel_t channel, uint32_t* state)
+{
+    extern rmt_dev_t RMT;
+    
+    FGEN_CHECK(channel < RMT_CHANNEL_MAX, "RMT CHANNEL ERR", ESP_ERR_INVALID_ARG);
+    *state = RMT.conf_ch[channel].conf1.tx_start;
+   return ESP_OK;
+}
+
+rmt_channel_status_t fgen_get_state(const fgen_resources_t* res)
+{
+    uint32_t state;
+
+    rmt_tx_get_state(res->channel, &state);
+
+    ESP_LOGD(FGEN_TAG, "Getting state of RMT channel %d returned %d", res->channel, state);
+    return state ? RMT_CHANNEL_BUSY : RMT_CHANNEL_IDLE;
+}
+
+/* -------------------------------------------------------------------------- */

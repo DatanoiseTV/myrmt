@@ -1,5 +1,4 @@
-/* RMT transmit example
-
+/* 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
    Unless required by applicable law or agreed to in writing, this
@@ -36,7 +35,7 @@
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
 /* ************************************************************************* */
 
-#define CMD_TAG "FGen"  // logging tag
+#define CMD_TAG "CMDS"  // logging tag
 
 /* ************************************************************************* */
 /*                               DATATYPES SECTION                           */
@@ -78,7 +77,9 @@ static fgen_resources_t* search_fgen(rmt_channel_t channel)
 
 static const char* state_msg(fgen_resources_t* fgen)
 {
-    return fgen->started ? "started": "stopped" ;
+    static const char* msg[] = {"uninit", "stopped", "started"};
+    rmt_channel_status_t state = fgen_get_state(fgen);
+    return msg[state];
 }
 
 /* ************************************************************************* */
@@ -101,7 +102,7 @@ static int exec_params(int argc, char **argv);
 static void register_params()
 {
     params_args.frequency =
-        arg_dbl1("f", "freq", "<frequency>", "Frequency, Hz");
+        arg_dbl1("f", "freq", "<Hz>", "Frequency");
     params_args.duty_cycle =
         arg_dbl0("d", "duty", "<duty cycle>",
                  "Defaults to 0.5 (50%) if not given");
@@ -111,7 +112,7 @@ static void register_params()
 
     const esp_console_cmd_t cmd = {
         .command = "params",
-        .help = "Computes the frequency generator parameters as well as the needed resouces. "
+        .help = "Computes the frequency generator parameters as well as the needed resources. "
                 "Does not create a frequency generator. ",
         .hint = NULL,
         .func = exec_params,
@@ -166,7 +167,7 @@ static int exec_create(int argc, char **argv);
 static void register_create()
 {
     create_args.frequency =
-        arg_dbl1("f", "freq", "<frequency>", "Frequency, Hz");
+        arg_dbl1("f", "freq", "<Hz>", "Frequency");
     create_args.duty_cycle =
         arg_dbl0("d", "duty", "<duty cycle>",
                  "Defaults to 0.5 (50%) if not given");
@@ -180,7 +181,7 @@ static void register_create()
     const esp_console_cmd_t cmd = {
         .command = "create",
         .help = "Creates a frequency generator and binds it to a GPIO pin. "
-                "Returns a channel identifier (1-8)"
+                "Returns a channel identifier (1-8). "
                 "Does not start it.",
         .hint = NULL,
         .func = exec_create,
@@ -208,7 +209,6 @@ static int exec_create(int argc, char **argv)
     fgen = fgen_alloc(&info, create_args.gpio_num->ival[0] );
     if (fgen != NULL) {
         register_fgen(fgen); 
-
         printf("------------------------------------------------------------------\n");
         printf("                   FREQUENCY GENERATOR CREATED                    \n");
         printf("Channel:\t\t%d\n", fgen->channel);
@@ -216,7 +216,7 @@ static int exec_create(int argc, char **argv)
         printf("Frequency:\t%0.4f Hz\t\tDuty Cycle:\t%0.2f%%\n", fgen->info.freq, fgen->info.duty_cycle*100);
         printf("------------------------------------------------------------------\n");
     } else {
-        printf("NO RESORECES AVAILABLE TO CREATE A NEW FREQUENCY GENERATOR\n");
+        printf("NO RESOURCES AVAILABLE TO CREATE A NEW FREQUENCY GENERATOR\n");
     }
     return 0;
 }
@@ -237,8 +237,8 @@ static int exec_delete(int argc, char **argv);
 static void register_delete()
 {
     delete_args.channel =
-        arg_int1("c", "channel", "<channel num>",
-                 "RMT channel number returned by the create command");
+        arg_int1("c", "channel", "<0-7>",
+                 "RMT channel number returned by the create command.");
     delete_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
@@ -292,7 +292,7 @@ static int exec_list(int argc, char **argv);
 static void register_list()
 {
     list_args.extended =
-        arg_lit0("x", "extended", "Extended listing");
+        arg_lit0("x", "extended", "Extended listing.");
     list_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
@@ -348,13 +348,13 @@ static int exec_start(int argc, char **argv);
 static void register_start()
 {
     start_args.channel =
-        arg_int1("c", "channel", "<channel num>",
-                 "RMT channel number returned by the create command");
+        arg_int1("c", "channel", "<0-7>",
+                 "RMT channel number returned by the create command.");
     start_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
         .command = "start",
-        .help = "Start Frequency geenrator given by channel id",
+        .help = "Start Frequency geenrator given by channel id.",
         .hint = NULL,
         .func = exec_start,
         .argtable = &start_args
@@ -401,13 +401,13 @@ static int exec_stop(int argc, char **argv);
 static void register_stop()
 {
     stop_args.channel =
-        arg_int1("c", "channel", "<channel num>",
-                 "RMT channel number returned by the create command");
+        arg_int1("c", "channel", "<0-7>",
+                 "RMT channel number returned by the create command.");
     stop_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "start",
-        .help = "Stopt Frequency generator given by channel id",
+        .command = "stop",
+        .help = "Stops Frequency generator given by channel id.",
         .hint = NULL,
         .func = exec_stop,
         .argtable = &stop_args
@@ -445,11 +445,13 @@ static int exec_stop(int argc, char **argv)
 
 void freq_cmds_register()
 {
+    esp_console_register_help_command();
     register_params();
     register_create();
     register_start();
     register_stop();
     register_delete();
     register_list();
+    printf("Try 'help' to check all supported commands\n");
 }
 

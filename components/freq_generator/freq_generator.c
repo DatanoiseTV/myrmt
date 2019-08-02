@@ -475,7 +475,7 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
         .clk_div              = res->info.prescaler,
         // Tx only config
         .tx_config.loop_en    = true,
-        .tx_config.carrier_en = false,
+        .tx_config.carrier_en = false
     };
 
     ret = rmt_config(&config);

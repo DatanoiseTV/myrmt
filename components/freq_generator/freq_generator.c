@@ -481,21 +481,15 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
     ret = rmt_config(&config);
     FGEN_CHECK(ret == ESP_OK, "Error configure RMT module",  ret);
 
-    ret = rmt_driver_install(config.channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
+    ret = rmt_driver_install(res->channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
 
-    // Copy the pattern we've just generated to the internal RMT buffers
-    ret = rmt_fill_tx_items(config.channel, res->items, info->nitems, 0);
-    FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
+    ret = rmt_tx_stop(res->channel);
+    FGEN_CHECK(ret == ESP_OK, "Make sure it is stopped",  ret);
 
     // This is a needed hack for Tx looping since the rmt_config does not do it.
-    ret = rmt_set_tx_intr_en(config.channel, false);
+    ret = rmt_set_tx_intr_en(res->channel, false);
     FGEN_CHECK(ret == ESP_OK, "Error disabling RMT Tx interrupt",  ret);
-
-    // we no longer need the allocated memory, since we copied the sequence 
-    // to the RMT buffers
-    free(res->items);
-    res->items = NULL;
 
     return ESP_OK;
     
@@ -558,6 +552,7 @@ void fgen_free(fgen_resources_t* res)
     fgen_channel_free(res->channel);
     fgen_gpio_free(res->gpio_num);
     rmt_driver_uninstall(res->channel);
+    free(res->items);
     free(res);
 }
 
@@ -565,7 +560,16 @@ void fgen_free(fgen_resources_t* res)
 
 esp_err_t fgen_start(fgen_resources_t* res)
 {
+    esp_err_t ret;
+
     ESP_LOGD(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
+
+     // Copy the generated pattern we've just generated to the internal RMT buffers
+    // The rmt_tx_stop places an EoTx in the beginning of the RMT memory buffer
+    ret = rmt_fill_tx_items(res->channel, res->items, res->info.nitems, 0);
+    FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);
+
+    // and start
     return rmt_tx_start(res->channel, true);
 }
 

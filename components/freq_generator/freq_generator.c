@@ -583,7 +583,9 @@ esp_err_t fgen_stop(fgen_resources_t* res)
 
 /* -------------------------------------------------------------------------- */
 
-// this should probably fo into the Espressif SDK
+#if 0
+// I have fopund that in continuos mode, the Tx bit resets itself when the first loop is done
+// so it is no longer a reliable indiocator of idle / busy
 static esp_err_t rmt_tx_get_state(rmt_channel_t channel, uint32_t* state)
 {
     extern rmt_dev_t RMT;
@@ -592,6 +594,18 @@ static esp_err_t rmt_tx_get_state(rmt_channel_t channel, uint32_t* state)
     *state = RMT.conf_ch[channel].conf1.tx_start;
    return ESP_OK;
 }
+#else
+// I have found that the rmt_tx_stop writes an EoTx marker at the beginning of
+// the RMT memory when stopping, so it is a reliable indicator ...
+static esp_err_t rmt_tx_get_state(rmt_channel_t channel, uint32_t* state)
+{
+    extern rmt_mem_t RMTMEM;
+
+    FGEN_CHECK(channel < RMT_CHANNEL_MAX, "RMT CHANNEL ERR", ESP_ERR_INVALID_ARG);
+    *state = RMTMEM.chan[channel].data32[0].val;
+   return ESP_OK;
+}
+#endif
 
 rmt_channel_status_t fgen_get_state(const fgen_resources_t* res)
 {

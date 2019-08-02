@@ -99,7 +99,7 @@ The number `N`, which can be quite large, is decomposed into [32 bit RMT items](
 >so on. In this mode, there will be an idle level lasting one clk_div cycle between N and N+1
 >transmissions.
 
-The frequency generator software tries to repeat the items `NRep` times before looping so that it minimizes jitter. Depending on the Available RMT RAM this is not always possible. The available RMT internal RAM is divided into 8 64-item blocks and can be flexibily assigned to RMT channels. Very low frequency generators such as 0.01 Hz can take up the whole RMT memory. The `params` utility shows us some examples.
+The frequency generator software tries to repeat the items `NRep` times before looping so that it minimizes jitter. Depending on the available RMT RAM this is not always possible. The available RMT internal RAM is divided into 8 64-item blocks and can be flexibily assigned to RMT channels (with some restrictions). Very low frequency generators such as 0.01 Hz can take up the whole RMT RAM. The `params` utility shows us some examples:
 
 
 ```bash

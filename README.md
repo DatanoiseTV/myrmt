@@ -8,9 +8,6 @@ Main characteristics:
 * Duty cycle between 0.01 and 0.99, 0.50 by default (square wave)
 * command line interface using a serial console
 
-![Console](doc/screenshot1.png?raw=true)
-
-
 # Configure the Project
 
 ```
@@ -33,41 +30,9 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 
 ## Commands
 
-1. Compute the frequency generator parameters as well as the needed resouces. Does not create a frequency generator.
+The most important command is `help` which shows everythoing else, as shown below:
 
-```bash
-params [-f | --freq <freq>] [-d | --duty <duty_cycle>]
-```
-
-2. Create a frequency generator bound to a GPIO pin but does not start it.
-
-```bash
-create [-f | --freq <freq>] [-d | --duty <duty_cycle>] [ -g | --gpio <GPIO num>]
-```
-
-3. List created frequency generators.
-
-```bash
-list
-```
-
-4. Starts frequency generator given by channel id (0-7).
-
-```bash
-start [-c | --channel]
-```
-
-5. Stops frequency generator given by channel id (0-7).
-
-```bash
-stop  [-c | --channel]
-```
-
-6. Delete Frequency generator given by channel id (0-7) and frees resources, including GPIO pin.
-
-```
-delete [-c | --channel]
-```
+![Console](doc/screenshot1.png?raw=true)
 
 # Design
 

@@ -148,7 +148,7 @@ static int exec_params(int argc, char **argv)
     printf("Final Duty Cycle:\t%0.2f%%\n", info.duty_cycle*100);
     printf("Prescaler:\t\t%d\n", info.prescaler);
     printf("N:\t\t\t%d (%d high + %d low)\n", info.N, info.NH, info.NL);
-    printf("Nitems:\t\t\t%d, repeated x%d\n", info.onitems, info.nrep);
+    printf("Nitems:\t\t\t%d, x%d times + EoTx\n", info.onitems, info.nrep);
     printf("Blocks:\t\t\t%d (64 items each)\n", info.mem_blocks);
     printf("Jitter:\t\t\t%0.3f us each %d times\n", info.jitter*1000000, info.nrep);
     printf("------------------------------------------------------------------\n");
@@ -356,7 +356,7 @@ static void register_start()
 
     const esp_console_cmd_t cmd = {
         .command = "start",
-        .help = "Start Frequency geenrator given by channel id.",
+        .help = "Start Frequency generator given by channel id.",
         .hint = NULL,
         .func = exec_start,
         .argtable = &start_args

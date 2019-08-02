@@ -485,7 +485,7 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
 
     ret = rmt_tx_stop(res->channel);
-    FGEN_CHECK(ret == ESP_OK, "Make sure it is stopped",  ret);
+    FGEN_CHECK(ret == ESP_OK, "Error stopping RMT Tx",  ret);
 
     // This is a needed hack for Tx looping since the rmt_config does not do it.
     ret = rmt_set_tx_intr_en(res->channel, false);
@@ -564,7 +564,7 @@ esp_err_t fgen_start(fgen_resources_t* res)
 
     ESP_LOGD(FGEN_TAG, "Starting RMT channel %d on GPIO %d => %0.2f Hz",res->channel, res->gpio_num, res->info.freq);
 
-     // Copy the generated pattern we've just generated to the internal RMT buffers
+    // Copy the generated pattern we've just generated to the internal RMT buffers
     // The rmt_tx_stop places an EoTx in the beginning of the RMT memory buffer
     ret = rmt_fill_tx_items(res->channel, res->items, res->info.nitems, 0);
     FGEN_CHECK(ret == ESP_OK, "Error copying RMT items to shared mem",  ret);

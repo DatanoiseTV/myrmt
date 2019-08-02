@@ -10,6 +10,7 @@
 
 #include <esp_system.h>
 #include <esp_log.h>
+
 #include <esp_console.h>
 #include <esp_vfs_dev.h>
 #include <driver/uart.h>
@@ -61,10 +62,10 @@ void freq_console_init()
      * correct while APB frequency is changing in light sleep mode.
      */
     const uart_config_t uart_config = {
-        .baud_rate = CONFIG_ESP_CONSOLE_UART_BAUDRATE,
-        .data_bits = UART_DATA_8_BITS,
-        .parity    = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
+        .baud_rate    = CONFIG_ESP_CONSOLE_UART_BAUDRATE,
+        .data_bits    = UART_DATA_8_BITS,
+        .parity       = UART_PARITY_DISABLE,
+        .stop_bits    = UART_STOP_BITS_1,
         .use_ref_tick = true
     };
     ESP_ERROR_CHECK(uart_param_config(CONFIG_ESP_CONSOLE_UART_NUM, &uart_config));
@@ -78,9 +79,9 @@ void freq_console_init()
 
     /* Initialize the console */
     esp_console_config_t console_config = {
-        .max_cmdline_args = 8,
+        .max_cmdline_args   = 8,
         .max_cmdline_length = 256,
-        .hint_color = atoi(LOG_COLOR_CYAN)
+        .hint_color         = atoi(LOG_COLOR_CYAN)
     };
     ESP_ERROR_CHECK(esp_console_init(&console_config));
 

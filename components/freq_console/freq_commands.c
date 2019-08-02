@@ -30,6 +30,8 @@
 // --------------
 
 #include "freq_generator.h"
+#include "freq_nvs.h"
+
 
 /* ************************************************************************* */
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
@@ -432,6 +434,59 @@ static int exec_stop(int argc, char **argv)
     return 0;
 }
 
+// ============================================================================
+
+// 'autoload' command arguments static variable
+static 
+struct {
+    struct arg_lit *yes;
+    struct arg_lit *no;
+    struct arg_end *end;
+} autoload_args;
+
+// forward declaration
+static int exec_autoload(int argc, char **argv);
+
+// 'stop' command registration
+static void register_autoload()
+{
+    autoload_args.yes =
+        arg_lit0("y", "yes", "Enable loading configuration at boot time.");
+     autoload_args.no =
+        arg_lit0("n", "no", "Disable loading configuration at boot time.");
+    autoload_args.end = arg_end(3);
+
+    const esp_console_cmd_t cmd = {
+        .command = "autoload",
+        .help = "Enable/disable loading configuration at boot time.",
+        .hint = NULL,
+        .func = exec_autoload,
+        .argtable = &autoload_args
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
+// 'autoload' command implementation
+static int exec_autoload(int argc, char **argv)
+{ 
+    int nerrors = arg_parse(argc, argv, (void **) &autoload_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, autoload_args.end, argv[0]);
+        return 1;
+    }
+
+    if (autoload_args.yes->count) {
+        freq_autoboot_save(true);
+    } else if (autoload_args.no->count) {
+        freq_autoboot_save(false);
+    } else {
+        printf("Error: Either -y or -n must be specified");
+    }
+    
+    return 0;
+}
+
+
 
 /* ************************************************************************* */
 /*                               API FUNCTIONS                               */
@@ -446,6 +501,7 @@ void freq_cmds_register()
     register_stop();
     register_delete();
     register_list();
+    register_autoload();
     printf("Try 'help' to check all supported commands\n");
 }
 

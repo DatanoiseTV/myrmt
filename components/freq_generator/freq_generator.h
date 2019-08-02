@@ -14,8 +14,8 @@ extern "C" {
 // Expressif SDK-IDF standard includes
 // -----------------------------------
 
-#include "driver/gpio.h"
-#include "driver/rmt.h"
+#include <driver/gpio.h>
+#include <driver/rmt.h>
 
 /* ************************************************************************* */
 /*                      DEFINES AND ENUMERATIONS SECTION                     */

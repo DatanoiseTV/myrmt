@@ -2,6 +2,8 @@
 
 4-channel square wave frequency generator based on ESP32's versatile RMT hardware module.
 
+![Console](doc/screenshot2.png?raw=true)
+
 Main characteristics:
 * Up to 4 independent channel outputs on GPIO pin #5,, #18 #19, #21
 * Frequency range from 0.01 Hz to 500 Khz

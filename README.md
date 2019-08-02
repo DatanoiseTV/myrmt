@@ -93,7 +93,7 @@ As seen in the figure below, N eventually becomes the number of `Fclk` clock tic
 
 The number `N`, which can be quite large, is decomposed into [32 bit RMT items](https://docs.espressif.com/projects/esp-idf/en/latest/api-reference/peripherals/rmt.html#transmit-data) forming a list that is loaded in RMT's internal RAM. When the RMT hardware reaches the end-of-list item, it loops again. According to ESP32 Technical manual, looping introduces a small `1/Fclk` delay (jitter):
 
->*Note*: When enabling the continuous transmission mode by setting
+>***Note***: When enabling the continuous transmission mode by setting
 >RMT_REG_TX_CONTI_MODE, the transmitter will transmit the data on the channel
 >continuously, that is, from the first byte to the last one, then from the first to the last again, and
 >so on. In this mode, there will be an idle level lasting one clk_div cycle between N and N+1

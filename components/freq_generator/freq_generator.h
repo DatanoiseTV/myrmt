@@ -21,11 +21,6 @@ extern "C" {
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
 /* ************************************************************************* */
 
-#define GPIO_5   5
-#define GPIO_18 18
-#define GPIO_19 19
-#define GPIO_21 21
-
 
 /* ************************************************************************* */
 /*                               DATATYPES SECTION                           */

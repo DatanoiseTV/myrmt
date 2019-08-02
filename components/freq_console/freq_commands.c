@@ -150,7 +150,7 @@ static int exec_params(int argc, char **argv)
     printf("N:\t\t\t%d (%d high + %d low)\n", info.N, info.NH, info.NL);
     printf("Nitems:\t\t\t%d, repeated x%d\n", info.onitems, info.nrep);
     printf("Blocks:\t\t\t%d (64 items each)\n", info.mem_blocks);
-    printf("Jitter:\t\t\t%0.3f ms each %d times\n", info.jitter*1000, info.nrep);
+    printf("Jitter:\t\t\t%0.3f us each %d times\n", info.jitter*1000000, info.nrep);
     printf("------------------------------------------------------------------\n");
     return 0;
 }

@@ -467,8 +467,8 @@ static void exec_start_single(rmt_channel_t channel)
     fgen = search_fgen(channel);
     if (fgen != NULL) {
        fgen_start(fgen);
-    }  
-    print_fgen_summary(fgen);
+       print_fgen_summary(fgen);
+    }     
 }
 
 
@@ -506,7 +506,7 @@ static void register_stop()
     extern struct stop_args_s stop_args;
 
     stop_args.channel =
-        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
+        arg_int0("c", "channel", "<0-7>", "RMT channel number.");
     stop_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
@@ -523,11 +523,11 @@ static void register_stop()
 static void exec_stop_single(rmt_channel_t channel)
 {
     fgen_resources_t* fgen;
-    fgen = search_fgen(stop_args.channel->ival[0]);
+    fgen = search_fgen(channel);
     if (fgen != NULL) {
        fgen_stop(fgen);
-    }  
-    print_fgen_summary(fgen);
+       print_fgen_summary(fgen);
+    }      
 }
 
 // 'stop' command implementation

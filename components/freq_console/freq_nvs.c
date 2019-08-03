@@ -70,15 +70,11 @@ esp_err_t freq_nvs_autoboot_load(uint32_t* flag)
     *flag = 0; // flag will default to 0, if not set yet in NVS
 
     res = nvs_get_u32(handle, "autoboot", flag);
-    switch (res) {
-    case ESP_OK:
-        ESP_LOGD(NVS_TAG, "autoboot flag = %d", *flag);
-        break;
-    case ESP_ERR_NVS_NOT_FOUND:
-        ESP_LOGD(NVS_TAG,"autoboot flag is not initialized yet!");
-        break;
-     default :
-        break;
+	if (res == ESP_OK) {
+		ESP_LOGD(NVS_TAG, "autoboot flag = %d", *flag);
+    } else if (res == ESP_ERR_NVS_NOT_FOUND) {
+    	ESP_LOGD(NVS_TAG,"autoboot flag is not initialized yet!");
+    	res = ESP_OK;
     }
     nvs_close(handle);
     return res;

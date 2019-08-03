@@ -252,7 +252,6 @@ static void register_create()
     const esp_console_cmd_t cmd = {
         .command  = "create",
         .help     = "Creates a frequency generator and binds it to a GPIO pin. "
-                    "Returns a channel identifier (1-8). "
                     "Does not start it.",
         .hint     = NULL,
         .func     = exec_create,
@@ -309,7 +308,7 @@ static void register_delete()
     const esp_console_cmd_t cmd = {
         .command  = "delete",
         .help     = "Deletes frequency generator and frees its GPIO pin. "
-                    "Must stop it first.",
+                    "Deletes all if no channel is given.",
         .hint     = NULL,
         .func     = exec_delete,
         .argtable = &delete_args
@@ -453,7 +452,8 @@ static void register_start()
 
     const esp_console_cmd_t cmd = {
         .command  = "start",
-        .help     = "Start Frequency generator given by channel id.",
+        .help     = "Starts frequency generator given by channel id. "
+                    "Starts all if no channel is given.",
         .hint     = NULL,
         .func     = exec_start,
         .argtable = &start_args
@@ -511,7 +511,8 @@ static void register_stop()
 
     const esp_console_cmd_t cmd = {
         .command  = "stop",
-        .help     = "Stops frequency generator given by channel id.",
+        .help     = "Stops frequency generator given by channel id. "
+                    "Stops all if no channel is given.",
         .hint     = NULL,
         .func     = exec_stop,
         .argtable = &stop_args
@@ -552,57 +553,6 @@ static int exec_stop(int argc, char **argv)
     return 0;
 }
 
-// ============================================================================
-
-
-
-// forward declaration
-static int exec_autoload(int argc, char **argv);
-
-// 'autoload' command registration
-static void register_autoload()
-{
-    extern struct autoload_args_s autoload_args;
-
-    autoload_args.yes =
-        arg_lit0("y", "yes", "Enable loading configuration at boot time.");
-    autoload_args.no =
-        arg_lit0("n", "no", "Disable loading configuration at boot time.");
-    autoload_args.end = arg_end(3);
-
-    const esp_console_cmd_t cmd = {
-        .command  = "autoload",
-        .help     = "Enable/disable loading configuration at boot time.",
-        .hint     = NULL,
-        .func     = exec_autoload,
-        .argtable = &autoload_args
-    };
-    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
-}
-
-// 'autoload' command implementation
-static int exec_autoload(int argc, char **argv)
-{ 
-    extern struct autoload_args_s autoload_args;
-
-    int nerrors = arg_parse(argc, argv, (void **) &autoload_args);
-    if (nerrors != 0) {
-        arg_print_errors(stderr, autoload_args.end, argv[0]);
-        return 1;
-    }
-
-    if (autoload_args.yes->count) {
-        freq_nvs_autoboot_save(true);
-    } else if (autoload_args.no->count) {
-        freq_nvs_autoboot_save(false);
-    } else {
-        printf("Error: Either -y or -n must be specified");
-    }
-    
-    return 0;
-}
-
-
 
 // ============================================================================
 
@@ -620,7 +570,8 @@ static void register_save()
 
     const esp_console_cmd_t cmd = {
         .command  = "save",
-        .help     = "Save frequency generators configuration to flash.",
+        .help     = "Saves frequency generator configuration to NVS given by channel id. "
+                    "Saves all if no channel is given.",
         .hint     = NULL,
         .func     = exec_save,
         .argtable = &save_args
@@ -685,7 +636,8 @@ static void register_load()
 
     const esp_console_cmd_t cmd = {
         .command  = "load",
-        .help     = "Load frequency generators configuration from flash.",
+        .help     = "Loads frequency generator configuration from NVS given by channel id. "
+                    "Loads all if no channel is given.",
         .hint     = NULL,
         .func     = exec_load,
         .argtable = &load_args
@@ -704,7 +656,7 @@ static void do_purge_single(fgen_resources_t* fgen)
 }
 
 
-static void do_load_single(nvs_handle_t handle, rmt_channel_t channel)
+static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
 {
     extern fgen_resources_t* FGEN[];
     
@@ -751,15 +703,82 @@ static int exec_load(int argc, char **argv)
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
     if (load_args.channel->count == 0) {
         for (rmt_channel_t ch = 0; ch <  RMT_CHANNEL_MAX; ch++) {
-          do_load_single(handle, RMT_CHANNEL_MAX-1-ch);
+          exec_load_single(handle, RMT_CHANNEL_MAX-1-ch);
         }
     } else {
         rmt_channel_t channel = load_args.channel->ival[0];
-        do_load_single(handle, channel);
+        exec_load_single(handle, channel);
     }
     ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, false) );
     return 0;
 }
+
+// ============================================================================
+
+// forward declaration
+static int exec_autoload(int argc, char **argv);
+
+// 'autoload' command registration
+static void register_autoload()
+{
+    extern struct autoload_args_s autoload_args;
+
+    autoload_args.yes =
+        arg_lit0("y", "yes", "Enable loading configuration at boot time.");
+    autoload_args.no =
+        arg_lit0("n", "no", "Disable loading configuration at boot time.");
+    autoload_args.end = arg_end(3);
+
+    const esp_console_cmd_t cmd = {
+        .command  = "autoload",
+        .help     = "Enable/disable loading configuration at boot time.",
+        .hint     = NULL,
+        .func     = exec_autoload,
+        .argtable = &autoload_args
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
+static void autoload_at_boot()
+{
+    uint32_t autoload;
+    nvs_handle_t    handle;
+    
+    ESP_ERROR_CHECK( freq_nvs_autoboot_load(&autoload) );
+    if (autoload) {
+        // Autoload from NVS
+        ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
+        for (rmt_channel_t ch = 0; ch <  RMT_CHANNEL_MAX; ch++) {
+          exec_load_single(handle, RMT_CHANNEL_MAX-1-ch);
+          exec_start_single(RMT_CHANNEL_MAX-1-ch);
+        }
+        ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, false) );
+    }
+}
+
+// 'autoload' command implementation
+static int exec_autoload(int argc, char **argv)
+{ 
+    extern struct autoload_args_s autoload_args;
+
+    int nerrors = arg_parse(argc, argv, (void **) &autoload_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, autoload_args.end, argv[0]);
+        return 1;
+    }
+
+    if (autoload_args.yes->count) {
+        freq_nvs_autoboot_save(true);
+    } else if (autoload_args.no->count) {
+        freq_nvs_autoboot_save(false);
+    } else {
+        printf("Error: Either -y or -n must be specified");
+    }
+    
+    return 0;
+}
+
+
 
 /* ************************************************************************* */
 /*                               API FUNCTIONS                               */
@@ -777,6 +796,7 @@ void freq_cmds_register()
     register_save();
     register_load();
     register_autoload();
+    autoload_at_boot();
     printf("Try 'help' to check all supported commands\n");
 }
 

@@ -24,7 +24,6 @@
 // -----------------------------------
 
 #include <esp_log.h>
-#include <driver/rmt.h>
 
 // --------------
 // Local includes

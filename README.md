@@ -32,9 +32,63 @@ See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/l
 
 ## Commands
 
-The most important command is `help` which shows everythoing else, as shown below:
+The most important command is `help` which shows everything else, as shown below:
 
-![Console](doc/screenshot1.png?raw=true)
+```bash
+ESP32> help
+help 
+  Print the list of registered commands
+
+params  -f <Hz> [-d <duty cycle>]
+  Computes the frequency generator parameters as well as the needed resources.
+  Does not create a frequency generator. 
+  -f, --freq=<Hz>  Frequency
+  -d, --duty=<duty cycle>  Defaults to 0.5 (50%) if not given
+
+create  -f <Hz> [-d <duty cycle>] [-g <GPIO num>]
+  Creates a frequency generator and binds it to a GPIO pin. Does not start it.
+  -f, --freq=<Hz>  Frequency
+  -d, --duty=<duty cycle>  Defaults to 0.5 (50%) if not given
+  -g, --gpio=<GPIO num>  Defaults to -1 if not given
+
+start  [-c <0-7>]
+  Starts frequency generator given by channel id. Starts all if no channel is 
+  given.
+  -c, --channel=<0-7>  RMT channel number.
+
+stop  [-c <0-7>]
+  Stops frequency generator given by channel id. Stops all if no channel is gi
+  ven.
+  -c, --channel=<0-7>  RMT channel number.
+
+delete  [-n] [-c <0-7>]
+  Deletes frequency generator and frees its GPIO pin. Deletes all if no channe
+  l is given.
+  -c, --channel=<0-7>  RMT channel number.
+     -n, --nvs  Delete NVS configuration as well.
+
+list  [-xn]
+  List all created frequency generators or NVS configuration.
+  -x, --extended  Extended listing.
+     -n, --nvs  List saved configuration in NVS.
+
+save  [-c <0-7>]
+  Saves frequency generator configuration to NVS given by channel id. Saves al
+  l if no channel is given.
+  -c, --channel=<0-7>  RMT channel number.
+
+load  [-c <0-7>]
+  Loads frequency generator configuration from NVS given by channel id. Loads 
+  all if no channel is given.
+  -c, --channel=<0-7>  RMT channel number.
+
+autoload  [-yn]
+  Enable/disable loading configuration at boot time.
+     -y, --yes  Enable loading configuration at boot time.
+      -n, --no  Disable loading configuration at boot time.
+
+ESP32> 
+```
 
 # Design
 

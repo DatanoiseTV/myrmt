@@ -731,7 +731,8 @@ static void register_autoload()
 
     const esp_console_cmd_t cmd = {
         .command  = "autoload",
-        .help     = "Enable/disable loading configuration at boot time.",
+        .help     = "Enables/disables loading configuration at boot time. "
+                    "Displays current mode if no flag is given",
         .hint     = NULL,
         .func     = exec_autoload,
         .argtable = &autoload_args
@@ -772,7 +773,9 @@ static int exec_autoload(int argc, char **argv)
     } else if (autoload_args.no->count) {
         freq_nvs_autoboot_save(false);
     } else {
-        printf("Error: Either -y or -n must be specified");
+        uint32_t autoload;
+        ESP_ERROR_CHECK( freq_nvs_autoboot_load(&autoload) );
+        printf("Autoload at boot time is currently %s.\n", (autoload ? "enabled" : "disabled"));
     }
     
     return 0;

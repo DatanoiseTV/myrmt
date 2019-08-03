@@ -30,7 +30,84 @@ make -j4 flash monitor
 
 See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for full steps to configure and use ESP-IDF to build projects.
 
-## Commands
+## Example of use
+
+In this example we will define 4 pure square wave (50% DC) frequency generators.
+
+1. It is recommeded to define the oscillators in decreasing order of frequency and let the system assign the GPIO pin:
+
+* 500 KHz
+* 5 KHz
+* 5 Hz
+* 0.05 Hz
+
+```bash
+ESP32> create -f 500000
+Channel: 07 [stopped]	GPIO: 05	Freq.: 500000.00 Hz	Blocks: 1
+ESP32> create -f 5000
+Channel: 06 [stopped]	GPIO: 18	Freq.: 5000.00 Hz	Blocks: 1
+ESP32> create -f 5
+Channel: 05 [stopped]	GPIO: 19	Freq.: 5.00 Hz	Blocks: 1
+ESP32> create -f 0.05
+Channel: 03 [stopped]	GPIO: 21	Freq.: 0.05 Hz	Blocks: 2
+```
+
+Note that most frequencies need only one block of RMT RAM. Extremely low frequencies will take up all the 8 available blocks. See some examples at te bottom of this readme file.
+
+2. Then, we'll save the configuration to non-volatile storage (NVS). Just typing `save` will store all 4 channels.
+
+```bash
+ESP32> save
+```
+3. We can review both the RAM data and the NVS (flash) configuration. 
+Note that the oscilators are stopped upon creation.
+
+```bash
+ESP32> list
+------------------------------------------------------------------
+Channel: 03 [stopped]	GPIO: 21	Freq.: 0.05 Hz	DC.: 50%	Blocks: 2
+Channel: 05 [stopped]	GPIO: 19	Freq.: 5.00 Hz	DC.: 50%	Blocks: 1
+Channel: 06 [stopped]	GPIO: 18	Freq.: 5000.00 Hz	DC.: 50%	Blocks: 1
+Channel: 07 [stopped]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 1
+------------------------------------------------------------------
+ESP32> list -n
+------------------------------------------------------------------
+Channel: 03 [nvs]	GPIO: 21	Freq.: 0.05 Hz	DC.: 50%	Blocks: 0
+Channel: 05 [nvs]	GPIO: 19	Freq.: 5.00 Hz	DC.: 50%	Blocks: 0
+Channel: 06 [nvs]	GPIO: 18	Freq.: 5000.00 Hz	DC.: 50%	Blocks: 0
+Channel: 07 [nvs]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 0
+------------------------------------------------------------------
+```
+
+3. We can start all oscillators at once or each one individually. In this example we start them all.
+
+```bash
+ESP32> start
+Channel: 03 [started]	GPIO: 21	Freq.: 0.05 Hz	DC.: 50%	Blocks: 2
+Channel: 05 [started]	GPIO: 19	Freq.: 5.00 Hz	DC.: 50%	Blocks: 1
+Channel: 06 [started]	GPIO: 18	Freq.: 5000.00 Hz	DC.: 50%	Blocks: 1
+Channel: 07 [started]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 1
+```
+
+4. We can also stop them all at once or one at a time.
+```bash
+ESP32> stop
+Channel: 03 [stopped]	GPIO: 21	Freq.: 0.05 Hz	DC.: 50%	Blocks: 2
+Channel: 05 [stopped]	GPIO: 19	Freq.: 5.00 Hz	DC.: 50%	Blocks: 1
+Channel: 06 [stopped]	GPIO: 18	Freq.: 5000.00 Hz	DC.: 50%	Blocks: 1
+Channel: 07 [stopped]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 1
+```
+
+5. Finally, when we are ready with our configuration it is quite convenient
+to load it automatically at boot time and let the ESP32 start them all. For this,
+we have to enable the autoload facility.
+
+```bash
+ESP32> autoload -y
+```
+
+
+## Command Reference
 
 The most important command is `help` which shows everything else, as shown below:
 

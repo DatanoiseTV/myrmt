@@ -118,21 +118,21 @@ static struct save_args_s {
 
 static void register_fgen(fgen_resources_t* fgen)
 {
-    extern fgen_resources_t* FGEN;
+    extern fgen_resources_t* FGEN[];
 
     FGEN[fgen->channel] = fgen; 
 }
 
 static void unregister_fgen(fgen_resources_t* fgen)
 {
-    extern fgen_resources_t* FGEN;
+    extern fgen_resources_t* FGEN[];
 
     FGEN[fgen->channel] = 0; 
 }
 
 static fgen_resources_t* search_fgen(rmt_channel_t channel)
 {
-    extern fgen_resources_t* FGEN;
+    extern fgen_resources_t* FGEN[];
 
     for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
         if ( (FGEN[i] != NULL) && (FGEN[i]->channel == channel) ) {
@@ -677,6 +677,12 @@ static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
     fgen_resources_t* fgen;
 
     freq_nvs_info_load(handle, channel, &nvs_info);
+
+    // Empty channel
+    if(nvs_info.gpio_num == GPIO_NUM_NC) {
+        return;
+    }
+
     fgen_info( nvs_info.freq, nvs_info.duty_cycle, &info);
     fgen = search_fgen(channel);
     if (fgen == NULL) {

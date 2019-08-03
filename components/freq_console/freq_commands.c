@@ -77,7 +77,7 @@ static struct delete_args_s {
 // 'list' command arguments variable
 static struct list_args_s {
     struct arg_lit *extended;
-    struct arg_lit *config;
+    struct arg_lit *nvs;
     struct arg_end *end;
 } list_args;
 
@@ -118,16 +118,22 @@ static struct save_args_s {
 
 static void register_fgen(fgen_resources_t* fgen)
 {
+    extern fgen_resources_t* FGEN;
+
     FGEN[fgen->channel] = fgen; 
 }
 
 static void unregister_fgen(fgen_resources_t* fgen)
 {
+    extern fgen_resources_t* FGEN;
+
     FGEN[fgen->channel] = 0; 
 }
 
 static fgen_resources_t* search_fgen(rmt_channel_t channel)
 {
+    extern fgen_resources_t* FGEN;
+
     for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
         if ( (FGEN[i] != NULL) && (FGEN[i]->channel == channel) ) {
             return FGEN[i];
@@ -145,20 +151,20 @@ static const char* state_msg(fgen_resources_t* fgen)
 
 static void print_fgen_summary(fgen_resources_t* fgen)
 {
-    printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
-                fgen->channel, state_msg(fgen), fgen->gpio_num, fgen->info.freq, fgen->info.mem_blocks);
+    printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tDC.: %0.0f%%\tBlocks: %d\n", 
+                fgen->channel, state_msg(fgen), fgen->gpio_num, fgen->info.freq, 100*fgen->info.duty_cycle, fgen->info.mem_blocks);
 }
 
 static void print_config_summary(rmt_channel_t channel, freq_nvs_info_t* info)
 {
-    printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
-                channel, "nvs", info->gpio_num, info->freq, 0);
+    printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tDC.: %0.0f%%\tBlocks: %d\n", 
+                channel, "nvs", info->gpio_num, info->freq, 100*info->duty_cycle, 0);
 }
 
 static void do_delete_single(fgen_resources_t* fgen)
 {
      if (fgen_get_state(fgen) == RMT_CHANNEL_BUSY) {
-            fgen_stop(fgen);
+        fgen_stop(fgen);
     }
     unregister_fgen(fgen);
     fgen_free(fgen);
@@ -189,11 +195,11 @@ static void register_params()
     params_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "params",
-        .help = "Computes the frequency generator parameters as well as the needed resources. "
-                "Does not create a frequency generator. ",
-        .hint = NULL,
-        .func = exec_params,
+        .command  = "params",
+        .help     = "Computes the frequency generator parameters as well as the needed resources. "
+                    "Does not create a frequency generator. ",
+        .hint     = NULL,
+        .func     = exec_params,
         .argtable = &params_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -253,12 +259,12 @@ static void register_create()
     create_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "create",
-        .help = "Creates a frequency generator and binds it to a GPIO pin. "
-                "Returns a channel identifier (1-8). "
-                "Does not start it.",
-        .hint = NULL,
-        .func = exec_create,
+        .command  = "create",
+        .help     = "Creates a frequency generator and binds it to a GPIO pin. "
+                    "Returns a channel identifier (1-8). "
+                    "Does not start it.",
+        .hint     = NULL,
+        .func     = exec_create,
         .argtable = &create_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -304,18 +310,17 @@ static void register_delete()
     extern struct delete_args_s delete_args;
 
     delete_args.channel =
-        arg_int1("c", "channel", "<0-7>",
-                 "RMT channel number returned by the create command.");
-        arg_lit0("n", "nvs",
-                 "Delete NVS configuration as well.");
+        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
+    delete_args.nvs =
+        arg_lit0("n", "nvs", "Delete NVS configuration as well.");
     delete_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "delete",
-        .help = "Deletes frequency generator and frees its GPIO pin. "
-                "Must stop it first.",
-        .hint = NULL,
-        .func = exec_delete,
+        .command  = "delete",
+        .help     = "Deletes frequency generator and frees its GPIO pin. "
+                    "Must stop it first.",
+        .hint     = NULL,
+        .func     = exec_delete,
         .argtable = &delete_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -367,16 +372,16 @@ static void register_list()
 
     list_args.extended =
         arg_lit0("x", "extended", "Extended listing.");
-    list_args.config =
+    list_args.nvs =
         arg_lit0("n", "nvs", "List saved configuration in NVS.");
     list_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "list",
-        .help = "List all created frequency generators or NVS configuration.",
-        .hint = NULL,
-        .func = exec_list,
-       
+        .command  = "list",
+        .help     = "List all created frequency generators or NVS configuration.",
+        .hint     = NULL,
+        .func     = exec_list,
+        .argtable = &list_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
@@ -396,7 +401,7 @@ static int exec_list(int argc, char **argv)
 
     // List saved conbfiguration instead
 
-    if (list_args.config->count) {
+    if (list_args.nvs->count) {
 
         freq_nvs_info_t info;
         nvs_handle_t    handle;
@@ -442,15 +447,14 @@ static void register_start()
     extern struct start_args_s start_args;
 
     start_args.channel =
-        arg_int1("c", "channel", "<0-7>",
-                 "RMT channel number returned by the create command.");
+        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
     start_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "start",
-        .help = "Start Frequency generator given by channel id.",
-        .hint = NULL,
-        .func = exec_start,
+        .command  = "start",
+        .help     = "Start Frequency generator given by channel id.",
+        .hint     = NULL,
+        .func     = exec_start,
         .argtable = &start_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -489,15 +493,14 @@ static void register_stop()
     extern struct stop_args_s stop_args;
 
     stop_args.channel =
-        arg_int1("c", "channel", "<0-7>",
-                 "RMT channel number returned by the create command.");
+        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
     stop_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "stop",
-        .help = "Stops Frequency generator given by channel id.",
-        .hint = NULL,
-        .func = exec_stop,
+        .command  = "stop",
+        .help     = "Stops frequency generator given by channel id.",
+        .hint     = NULL,
+        .func     = exec_stop,
         .argtable = &stop_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -543,10 +546,10 @@ static void register_autoload()
     autoload_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "autoload",
-        .help = "Enable/disable loading configuration at boot time.",
-        .hint = NULL,
-        .func = exec_autoload,
+        .command  = "autoload",
+        .help     = "Enable/disable loading configuration at boot time.",
+        .hint     = NULL,
+        .func     = exec_autoload,
         .argtable = &autoload_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -587,26 +590,37 @@ static void register_save()
     extern struct save_args_s save_args;
 
     save_args.channel =
-        arg_int0("c", "channel", "<0-7>",
-                 "RMT channel number.");
-
+        arg_int0("c", "channel", "<0-7>", "RMT channel number.");
     save_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "save",
-        .help = "Save frequency generators configuration to flash.",
-        .hint = NULL,
-        .func = exec_save,
+        .command  = "save",
+        .help     = "Save frequency generators configuration to flash.",
+        .hint     = NULL,
+        .func     = exec_save,
         .argtable = &save_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
+static void do_save_single(nvs_handle_t handle, rmt_channel_t channel)
+{
+    fgen_resources_t* fgen;
+    freq_nvs_info_t   nvs_info;
+
+    fgen = search_fgen(channel);
+    if (fgen != NULL) {
+        nvs_info.gpio_num   = fgen->gpio_num;
+        nvs_info.freq       = fgen->info.freq;
+        nvs_info.duty_cycle = fgen->info.duty_cycle;
+        ESP_ERROR_CHECK( freq_nvs_info_save(handle, channel, &nvs_info) );
+    }  
 }
 
 // 'save' command implementation
 static int exec_save(int argc, char **argv)
 { 
     extern struct save_args_s save_args;
-    freq_nvs_info_t info;
     nvs_handle_t    handle;
 
     int nerrors = arg_parse(argc, argv, (void **) &save_args);
@@ -618,23 +632,14 @@ static int exec_save(int argc, char **argv)
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READWRITE, &handle) );
     if (save_args.channel->count == 0) {
         for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
-            if ( FGEN[i] != NULL ) {
-                info.gpio_num   = FGEN[i]->gpio_num;
-                info.freq       = FGEN[i]->info.freq;
-                info.duty_cycle = FGEN[i]->info.duty_cycle;
-                ESP_ERROR_CHECK( freq_nvs_info_save(handle, i, &info) );
-            }
+            do_save_single(handle, i);
         }
     } else {
-        rmt_channel_t i = save_args.channel->ival[0];
-        if ( FGEN[i] != NULL ) {
-            info.gpio_num   = FGEN[i]->gpio_num;
-            info.freq       = FGEN[i]->info.freq;
-            info.duty_cycle = FGEN[i]->info.duty_cycle;
-            ESP_ERROR_CHECK( freq_nvs_info_save(handle, i, &info) );
-        }
+        rmt_channel_t channel = save_args.channel->ival[0];
+        do_save_single(handle, channel);
     }
     ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, true) );
+
     return 0;
 }
 
@@ -649,16 +654,15 @@ static void register_load()
     extern struct load_args_s load_args;
 
     load_args.channel =
-        arg_int0("c", "channel", "<0-7>",
-                 "RMT channel number.");
+        arg_int0("c", "channel", "<0-7>", "RMT channel number.");
 
     load_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "load",
-        .help = "Load frequency generators configuration from flash.",
-        .hint = NULL,
-        .func = exec_load,
+        .command  = "load",
+        .help     = "Load frequency generators configuration from flash.",
+        .hint     = NULL,
+        .func     = exec_load,
         .argtable = &load_args
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
@@ -708,10 +712,10 @@ static int exec_load(int argc, char **argv)
           exec_load_single(handle, i);
         }
     } else {
-        rmt_channel_t channel = save_args.channel->ival[0];
+        rmt_channel_t channel = load_args.channel->ival[0];
         exec_load_single(handle, channel);
     }
-    ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, true) );
+    ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, false) );
     return 0;
 }
 
@@ -728,9 +732,9 @@ void freq_cmds_register()
     register_stop();
     register_delete();
     register_list();
-    register_autoload();
     register_save();
     register_load();
+    register_autoload();
     printf("Try 'help' to check all supported commands\n");
 }
 

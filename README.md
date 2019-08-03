@@ -8,7 +8,7 @@ Main characteristics:
 * Up to 4 independent channel outputs on GPIO pin #5,, #18 #19, #21
 * Frequency range from 0.01 Hz to 500 Khz
 * Duty cycle between 0.01 and 0.99, 0.50 by default (square wave)
-* command line interface using a serial console
+* command line interface using a serial console. The CLI has a history facility.
 
 # Configure the Project
 
@@ -52,14 +52,14 @@ ESP32> create -f 0.05
 Channel: 03 [stopped]	GPIO: 21	Freq.: 0.05 Hz	Blocks: 2
 ```
 
-Note that most frequencies need only one block of RMT RAM. Extremely low frequencies will take up all the 8 available blocks. See some examples at te bottom of this readme file.
+Note that most frequencies need only one block of RMT RAM. Extremely low frequencies will take up all the 8 available blocks. See some examples at the bottom of this readme file.
 
 2. Then, we'll save the configuration to non-volatile storage (NVS). Just typing `save` will store all 4 channels.
 
 ```bash
 ESP32> save
 ```
-3. We can review both the RAM data and the NVS (flash) configuration. 
+3. We can review both the RAM data with `list` and the NVS configuration with `list -n`. 
 Note that the oscilators are stopped upon creation.
 
 ```bash
@@ -79,7 +79,7 @@ Channel: 07 [nvs]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 0
 ------------------------------------------------------------------
 ```
 
-3. We can start all oscillators at once or each one individually. In this example we start them all.
+3. We can start all oscillators at once or each one individually. In this example we start them all just typing `start`.
 
 ```bash
 ESP32> start
@@ -89,7 +89,7 @@ Channel: 06 [started]	GPIO: 18	Freq.: 5000.00 Hz	DC.: 50%	Blocks: 1
 Channel: 07 [started]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 1
 ```
 
-4. We can also stop them all at once or one at a time.
+4. We can also stop them all at once using `stop` or one at a time (i.e `stop -c 7`).
 ```bash
 ESP32> stop
 Channel: 03 [stopped]	GPIO: 21	Freq.: 0.05 Hz	DC.: 50%	Blocks: 2
@@ -100,10 +100,14 @@ Channel: 07 [stopped]	GPIO: 05	Freq.: 500000.00 Hz	DC.: 50%	Blocks: 1
 
 5. Finally, when we are ready with our configuration it is quite convenient
 to load it automatically at boot time and let the ESP32 start them all. For this,
-we have to enable the autoload facility.
+we have to enable the autoload facility with the `àutoload -y`. command
 
 ```bash
+ESP32> autoload
+Autoload at boot time is currently disabled.
 ESP32> autoload -y
+ESP32> autoload
+Autoload at boot time is currently enabled.
 ```
 
 
@@ -170,7 +174,7 @@ ESP32>
 
 # Design
 
-The frequncy generator is based on these formulae:
+The frequency generator is based on these formulae:
 
 ```
 Fclk = ( FREQ_APB / Prescaler ) [Hz] RMT internal clock

@@ -166,7 +166,8 @@ static
 rmt_channel_t fgen_channel_alloc(size_t mem_blocks)
 {
     size_t N;
-    for (rmt_channel_t ch=RMT_CHANNEL_MAX-1; ch >=0; ch--) {
+    for (rmt_channel_t i = 0; i < RMT_CHANNEL_MAX; i++) {
+        rmt_channel_t ch = RMT_CHANNEL_MAX-1-i;
         N = fgen_max_mem_blocks(ch);
         if (FREQ_CHANNEL[ch].state == FGEN_CHANNEL_FREE && mem_blocks <= N) {
             ESP_LOGD(FGEN_TAG,"Allocation new RMT channel %d", ch);

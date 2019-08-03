@@ -408,10 +408,10 @@ static int exec_list(int argc, char **argv)
 
         ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
         printf("------------------------------------------------------------------\n");
-        for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
-            ESP_ERROR_CHECK( freq_nvs_info_load(handle, i, &info) );
+        for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
+            ESP_ERROR_CHECK( freq_nvs_info_load(handle, channel, &info) );
             if (info.gpio_num != GPIO_NUM_NC) {
-                print_config_summary(i, &info);
+                print_config_summary(channel, &info);
             }
         }
         printf("------------------------------------------------------------------\n");
@@ -631,8 +631,8 @@ static int exec_save(int argc, char **argv)
     
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READWRITE, &handle) );
     if (save_args.channel->count == 0) {
-        for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
-            do_save_single(handle, i);
+        for (rmt_channel_t ch = 0; ch < RMT_CHANNEL_MAX; ch++) {
+            do_save_single(handle, ch);
         }
     } else {
         rmt_channel_t channel = save_args.channel->ival[0];
@@ -678,7 +678,7 @@ static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
 
     freq_nvs_info_load(handle, channel, &nvs_info);
 
-    // Empty channel
+    // No channel stored in NVS
     if(nvs_info.gpio_num == GPIO_NUM_NC) {
         return;
     }
@@ -714,8 +714,8 @@ static int exec_load(int argc, char **argv)
     
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
     if (load_args.channel->count == 0) {
-        for (rmt_channel_t i = RMT_CHANNEL_MAX-1; i>=0; i--) {
-          exec_load_single(handle, i);
+        for (rmt_channel_t ch = 0; ch <  RMT_CHANNEL_MAX; ch++) {
+          exec_load_single(handle, RMT_CHANNEL_MAX-1-ch);
         }
     } else {
         rmt_channel_t channel = load_args.channel->ival[0];

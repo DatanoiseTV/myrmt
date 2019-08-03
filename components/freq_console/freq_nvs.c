@@ -204,6 +204,7 @@ esp_err_t freq_nvs_info_load(nvs_handle_t handle, uint32_t channel, freq_nvs_inf
     if (res == ESP_OK) {
 		NVS_CHECK(length == sizeof(freq_nvs_info_t), "Read size does not match freq_nvs_info_t size", ESP_FAIL);
     } else if (res == ESP_ERR_NVS_NOT_FOUND) {
+    	ESP_LOGD(NVS_TAG, "No freq_nvs_info_t info stored in NVS for channel %u", channel);
     	res = ESP_OK;
     }
     return res;

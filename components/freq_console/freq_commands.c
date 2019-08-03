@@ -70,6 +70,7 @@ static struct create_args_s {
 // 'delete' command arguments variable
 static struct delete_args_s {
     struct arg_int *channel;
+    struct arg_lit *nvs;
     struct arg_end *end;
 } delete_args;
 
@@ -153,6 +154,16 @@ static void print_config_summary(rmt_channel_t channel, freq_nvs_info_t* info)
     printf("Channel: %02d [%s]\tGPIO: %02d\tFreq.: %0.2f Hz\tBlocks: %d\n", 
                 channel, "nvs", info->gpio_num, info->freq, 0);
 }
+
+static void do_delete_single(fgen_resources_t* fgen)
+{
+     if (fgen_get_state(fgen) == RMT_CHANNEL_BUSY) {
+            fgen_stop(fgen);
+    }
+    unregister_fgen(fgen);
+    fgen_free(fgen);
+}
+
 
 /* ************************************************************************* */
 /*                     COMMAND IMPLEMENTATION SECTION                        */
@@ -295,6 +306,8 @@ static void register_delete()
     delete_args.channel =
         arg_int1("c", "channel", "<0-7>",
                  "RMT channel number returned by the create command.");
+        arg_lit0("n", "nvs",
+                 "Delete NVS configuration as well.");
     delete_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
@@ -308,12 +321,24 @@ static void register_delete()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
+static void exec_delete_single(rmt_channel_t channel)
+{
+    fgen_resources_t* fgen;
+
+    fgen = search_fgen(channel);
+    if (fgen != NULL) {
+        if (fgen_get_state(fgen) == RMT_CHANNEL_BUSY) {
+            fgen_stop(fgen);
+        }
+        unregister_fgen(fgen);
+        fgen_free(fgen);
+    }  
+}
+
 // 'delete' command implementation
 static int exec_delete(int argc, char **argv)
 {
     extern struct delete_args_s delete_args;
-
-    fgen_resources_t* fgen;
 
     int nerrors = arg_parse(argc, argv, (void **) &delete_args);
     if (nerrors != 0) {
@@ -321,17 +346,11 @@ static int exec_delete(int argc, char **argv)
         return 1;
     }
 
-    // Erase saved config anyway if exists
-    ESP_ERROR_CHECK( freq_nvs_info_erase(delete_args.channel->ival[0]) );
+    if(delete_args.nvs->count) {
+        ESP_ERROR_CHECK( freq_nvs_info_erase( delete_args.channel->ival[0]) );
+    }
 
-    fgen = search_fgen(delete_args.channel->ival[0]);
-    if (fgen != NULL) {
-        if (fgen_get_state(fgen) == 2) {
-            fgen_stop(fgen);
-        }
-        unregister_fgen(fgen);
-        fgen_free(fgen);
-    }  
+    exec_delete_single(delete_args.channel->ival[0]);
     return 0;
 }
 
@@ -636,7 +655,7 @@ static void register_load()
     load_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
-        .command = "save",
+        .command = "load",
         .help = "Load frequency generators configuration from flash.",
         .hint = NULL,
         .func = exec_load,
@@ -645,64 +664,52 @@ static void register_load()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
-static void load_single_channel(nvs_handle_t handle, rmt_channel_t i)
+static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
 {
     extern fgen_resources_t* FGEN[];
-    esp_err_t         res;
+    
     freq_nvs_info_t   nvs_info;
     fgen_info_t       info;
     fgen_resources_t* fgen;
 
-    res = freq_nvs_info_load(handle, i, &nvs_info);
+    freq_nvs_info_load(handle, channel, &nvs_info);
     fgen_info( nvs_info.freq, nvs_info.duty_cycle, &info);
-
-    if (FGEN[i] == NULL) {
+    fgen = search_fgen(channel);
+    if (fgen == NULL) {
         // Channel not created in memory
         fgen = fgen_alloc(&info, nvs_info.gpio_num);
-        if (fgen != NULL) {
-            register_fgen(fgen); 
-        }
+        register_fgen(fgen); 
 
     } else {
-        // Alreqady existing in memory
+        // Already existing in memory
+        do_delete_single(fgen);
+        fgen = fgen_alloc(&info, nvs_info.gpio_num);
+        register_fgen(fgen); 
     }
 
 }
-
 
 
 // 'load' command implementation
 static int exec_load(int argc, char **argv)
 { 
     extern struct load_args_s load_args;
-
-    freq_nvs_info_t info;
     nvs_handle_t    handle;
 
-    int nerrors = arg_parse(argc, argv, (void **) &save_args);
+    int nerrors = arg_parse(argc, argv, (void **) &load_args);
     if (nerrors != 0) {
-        arg_print_errors(stderr, save_args.end, argv[0]);
+        arg_print_errors(stderr, load_args.end, argv[0]);
         return 1;
     }
     
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
     if (load_args.channel->count == 0) {
-        for (rmt_channel_t i = 0; i<RMT_CHANNEL_MAX; i++) {
-            if ( FGEN[i] != NULL ) {
-                info.gpio_num   = FGEN[i]->gpio_num;
-                info.freq       = FGEN[i]->info.freq;
-                info.duty_cycle = FGEN[i]->info.duty_cycle;
-                ESP_ERROR_CHECK( freq_nvs_info_save(handle, i, &info) );
-            }
+        for (rmt_channel_t i = RMT_CHANNEL_MAX-1; i>=0; i--) {
+          exec_load_single(handle, i);
         }
     } else {
-        rmt_channel_t i = save_args.channel->ival[0];
-        if ( FGEN[i] != NULL ) {
-            info.gpio_num   = FGEN[i]->gpio_num;
-            info.freq       = FGEN[i]->info.freq;
-            info.duty_cycle = FGEN[i]->info.duty_cycle;
-            ESP_ERROR_CHECK( freq_nvs_info_save(handle, i, &info) );
-        }
+        rmt_channel_t channel = save_args.channel->ival[0];
+        exec_load_single(handle, channel);
     }
     ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, true) );
     return 0;
@@ -723,7 +730,7 @@ void freq_cmds_register()
     register_list();
     register_autoload();
     register_save();
-    //register_load();
+    register_load();
     printf("Try 'help' to check all supported commands\n");
 }
 

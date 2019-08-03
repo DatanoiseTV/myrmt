@@ -30,7 +30,7 @@ make -j4 flash monitor
 
 See the [Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for full steps to configure and use ESP-IDF to build projects.
 
-## Example of use
+# Example of use
 
 In this example we will define 4 pure square wave (50% DC) frequency generators.
 
@@ -107,7 +107,7 @@ ESP32> autoload -y
 ```
 
 
-## Command Reference
+# Command Reference
 
 The most important command is `help` which shows everything else, as shown below:
 

@@ -318,7 +318,7 @@ static void register_delete()
 }
 
 
-static void do_delete_single(rmt_channel_t channel)
+static void exec_delete_single(rmt_channel_t channel)
 {
     fgen_resources_t* fgen;
 
@@ -344,13 +344,13 @@ static int exec_delete(int argc, char **argv)
     }
 
     if(delete_args.channel->count) {
-        do_delete_single(delete_args.channel->ival[0]);
+        exec_delete_single(delete_args.channel->ival[0]);
         if(delete_args.nvs->count) {
             ESP_ERROR_CHECK( freq_nvs_info_erase( delete_args.channel->ival[0]) );
         }
     } else {
         for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
-            do_delete_single(channel);
+            exec_delete_single(channel);
             if(delete_args.nvs->count) {
                 ESP_ERROR_CHECK( freq_nvs_info_erase( channel) );
             }
@@ -461,7 +461,7 @@ static void register_start()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
-static void do_start_single(rmt_channel_t channel)
+static void exec_start_single(rmt_channel_t channel)
 {
     fgen_resources_t* fgen;
     fgen = search_fgen(channel);
@@ -484,10 +484,10 @@ static int exec_start(int argc, char **argv)
     }
 
     if (start_args.channel->count) {
-        do_start_single(start_args.channel->ival[0]);
+        exec_start_single(start_args.channel->ival[0]);
     }  else {
         for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
-            do_start_single(channel);
+            exec_start_single(channel);
         }
     }
 
@@ -520,7 +520,7 @@ static void register_stop()
 }
 
 
-static void do_stop_single(rmt_channel_t channel)
+static void exec_stop_single(rmt_channel_t channel)
 {
     fgen_resources_t* fgen;
     fgen = search_fgen(stop_args.channel->ival[0]);
@@ -542,10 +542,10 @@ static int exec_stop(int argc, char **argv)
     }
 
     if (stop_args.channel->count) {
-        do_stop_single(stop_args.channel->ival[0]);
+        exec_stop_single(stop_args.channel->ival[0]);
     }  else {
         for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
-            do_stop_single(channel);
+            exec_stop_single(channel);
         }
     }
 

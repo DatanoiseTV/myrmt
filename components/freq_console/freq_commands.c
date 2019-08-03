@@ -161,15 +161,6 @@ static void print_config_summary(rmt_channel_t channel, freq_nvs_info_t* info)
                 channel, "nvs", info->gpio_num, info->freq, 100*info->duty_cycle, 0);
 }
 
-static void do_delete_single(fgen_resources_t* fgen)
-{
-     if (fgen_get_state(fgen) == RMT_CHANNEL_BUSY) {
-        fgen_stop(fgen);
-    }
-    unregister_fgen(fgen);
-    fgen_free(fgen);
-}
-
 
 /* ************************************************************************* */
 /*                     COMMAND IMPLEMENTATION SECTION                        */
@@ -310,7 +301,7 @@ static void register_delete()
     extern struct delete_args_s delete_args;
 
     delete_args.channel =
-        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
+        arg_int0("c", "channel", "<0-7>", "RMT channel number.");
     delete_args.nvs =
         arg_lit0("n", "nvs", "Delete NVS configuration as well.");
     delete_args.end = arg_end(3);
@@ -326,7 +317,8 @@ static void register_delete()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
-static void exec_delete_single(rmt_channel_t channel)
+
+static void do_delete_single(rmt_channel_t channel)
 {
     fgen_resources_t* fgen;
 
@@ -351,11 +343,20 @@ static int exec_delete(int argc, char **argv)
         return 1;
     }
 
-    if(delete_args.nvs->count) {
-        ESP_ERROR_CHECK( freq_nvs_info_erase( delete_args.channel->ival[0]) );
+    if(delete_args.channel->count) {
+        do_delete_single(delete_args.channel->ival[0]);
+        if(delete_args.nvs->count) {
+            ESP_ERROR_CHECK( freq_nvs_info_erase( delete_args.channel->ival[0]) );
+        }
+    } else {
+        for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
+            do_delete_single(channel);
+            if(delete_args.nvs->count) {
+                ESP_ERROR_CHECK( freq_nvs_info_erase( channel) );
+            }
+        }
     }
 
-    exec_delete_single(delete_args.channel->ival[0]);
     return 0;
 }
 
@@ -447,7 +448,7 @@ static void register_start()
     extern struct start_args_s start_args;
 
     start_args.channel =
-        arg_int1("c", "channel", "<0-7>", "RMT channel number.");
+        arg_int0("c", "channel", "<0-7>", "RMT channel number.");
     start_args.end = arg_end(3);
 
     const esp_console_cmd_t cmd = {
@@ -460,12 +461,21 @@ static void register_start()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
+static void do_start_single(rmt_channel_t channel)
+{
+    fgen_resources_t* fgen;
+    fgen = search_fgen(channel);
+    if (fgen != NULL) {
+       fgen_start(fgen);
+    }  
+    print_fgen_summary(fgen);
+}
+
+
 // 'start' command implementation
 static int exec_start(int argc, char **argv)
 {
     extern struct start_args_s start_args;
-
-    fgen_resources_t* fgen;
 
     int nerrors = arg_parse(argc, argv, (void **) &start_args);
     if (nerrors != 0) {
@@ -473,11 +483,14 @@ static int exec_start(int argc, char **argv)
         return 1;
     }
 
-    fgen = search_fgen(start_args.channel->ival[0]);
-    if (fgen != NULL) {
-       fgen_start(fgen);
-    }  
-    print_fgen_summary(fgen);
+    if (start_args.channel->count) {
+        do_start_single(start_args.channel->ival[0]);
+    }  else {
+        for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
+            do_start_single(channel);
+        }
+    }
+
     return 0;
 }
 
@@ -506,12 +519,21 @@ static void register_stop()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
+
+static void do_stop_single(rmt_channel_t channel)
+{
+    fgen_resources_t* fgen;
+    fgen = search_fgen(stop_args.channel->ival[0]);
+    if (fgen != NULL) {
+       fgen_stop(fgen);
+    }  
+    print_fgen_summary(fgen);
+}
+
 // 'stop' command implementation
 static int exec_stop(int argc, char **argv)
 {
     extern struct stop_args_s stop_args;
-
-    fgen_resources_t* fgen;
 
     int nerrors = arg_parse(argc, argv, (void **) &stop_args);
     if (nerrors != 0) {
@@ -519,11 +541,14 @@ static int exec_stop(int argc, char **argv)
         return 1;
     }
 
-    fgen = search_fgen(stop_args.channel->ival[0]);
-    if (fgen != NULL) {
-       fgen_stop(fgen);
-    }  
-    print_fgen_summary(fgen);
+    if (stop_args.channel->count) {
+        do_stop_single(stop_args.channel->ival[0]);
+    }  else {
+        for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
+            do_stop_single(channel);
+        }
+    }
+
     return 0;
 }
 
@@ -668,7 +693,18 @@ static void register_load()
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
-static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
+
+static void do_purge_single(fgen_resources_t* fgen)
+{
+     if (fgen_get_state(fgen) == RMT_CHANNEL_BUSY) {
+        fgen_stop(fgen);
+    }
+    unregister_fgen(fgen);
+    fgen_free(fgen);
+}
+
+
+static void do_load_single(nvs_handle_t handle, rmt_channel_t channel)
 {
     extern fgen_resources_t* FGEN[];
     
@@ -692,7 +728,7 @@ static void exec_load_single(nvs_handle_t handle, rmt_channel_t channel)
 
     } else {
         // Already existing in memory
-        do_delete_single(fgen);
+        do_purge_single(fgen);
         fgen = fgen_alloc(&info, nvs_info.gpio_num);
         register_fgen(fgen); 
     }
@@ -715,11 +751,11 @@ static int exec_load(int argc, char **argv)
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
     if (load_args.channel->count == 0) {
         for (rmt_channel_t ch = 0; ch <  RMT_CHANNEL_MAX; ch++) {
-          exec_load_single(handle, RMT_CHANNEL_MAX-1-ch);
+          do_load_single(handle, RMT_CHANNEL_MAX-1-ch);
         }
     } else {
         rmt_channel_t channel = load_args.channel->ival[0];
-        exec_load_single(handle, channel);
+        do_load_single(handle, channel);
     }
     ESP_ERROR_CHECK( freq_nvs_end_transaction(handle, false) );
     return 0;

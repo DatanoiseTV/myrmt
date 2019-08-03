@@ -160,7 +160,8 @@ load  [-c <0-7>]
   -c, --channel=<0-7>  RMT channel number.
 
 autoload  [-yn]
-  Enable/disable loading configuration at boot time.
+  Enables/disables loading configuration at boot time. Displays current mode i
+  f no flag is given
      -y, --yes  Enable loading configuration at boot time.
       -n, --no  Disable loading configuration at boot time.
 

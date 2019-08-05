@@ -381,15 +381,14 @@ rmt_item32_t* fgen_fill_items(rmt_item32_t* item, uint32_t NH, uint32_t NL)
 static 
 void fgen_print_items(const rmt_item32_t* p, uint32_t N)
 {
-    
+    ESP_LOGD(FGEN_TAG,"Displaying %d items + EoTx", N-1);
+
+#if CONFIG_LOG_DEFAULT_LEVEL == ESP_LOG_VERBOSE
     const uint32_t NN = 8;
     uint32_t rows = N / NN;
     uint32_t rem  = N % NN;
-    uint32_t row, offset, i, j;
-
-    ESP_LOGD(FGEN_TAG,"Displaying %d items + EoTx", N-1);
-    ESP_LOGD(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
-#if LOG_LOCAL_LEVEL > ESP_LOG_INFO
+    uint32_t row, offset, i, j;  
+    ESP_LOGV(FGEN_TAG,"%d complete rows with %d items each and %d more items in the last row", rows, NN, rem);
     printf("-------------------------------------------------------------------\n");
     for (row = 0; row < rows; row++) {
         for (i=0; i<NN; i++) {

@@ -36,7 +36,7 @@
 /*                      DEFINES AND ENUMERATIONS SECTION                     */
 /* ************************************************************************* */
 
-#define MAIN_TAG "main"
+#define MAIN_TAG "freq"
 
 /* ************************************************************************* */
 /*                               DATATYPES SECTION                           */
@@ -73,9 +73,9 @@ static void app_nvs_init()
 
 void app_main(void *ignore)
 {
-    ESP_LOGD(MAIN_TAG, "Starting interactive program");
+    ESP_LOGI(MAIN_TAG, "Starting interactive console");
     app_nvs_init();
     freq_console_init();
-    freq_console_loop();
+    freq_console_loop();    // never returns from here
     vTaskDelete(NULL);
 }

@@ -1,3 +1,8 @@
+/* 
+   (c) Rafael González (astrorafael@gmail.com), LICA, Ftad. CC. Fisicas, UCM
+
+   See project's LICENSE file.
+*/
 
 /* ************************************************************************* */
 /*                         INCLUDE HEADER SECTION                            */

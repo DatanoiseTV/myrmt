@@ -19,6 +19,7 @@
 // Expressif SDK-IDF standard includes
 // -----------------------------------
 
+#include <esp_system.h>
 #include <esp_log.h>
 
 // --------------
@@ -106,13 +107,15 @@ fgen_channel_t FREQ_CHANNEL[RMT_CHANNEL_MAX] = {
 static
 gpio_num_t fgen_gpio_alloc(gpio_num_t gpio_num)
 {
-    if (gpio_num != GPIO_NUM_NC)
+    if (gpio_num != GPIO_NUM_NC) {
+        ESP_LOGD(FGEN_TAG,"returning same GPIO %d as given", gpio_num);
         return gpio_num;
+    }
 
     for (int i=0; i<FREQ_GPIO_NUM; i++) {
         if (FREQ_GPIO[i].allocated == false) {
             FREQ_GPIO[i].allocated = true;
-            ESP_LOGD(FGEN_TAG,"Allocation new GPIO %d", FREQ_GPIO[i].gpio_num);
+            ESP_LOGD(FGEN_TAG,"Allocating new GPIO %d", FREQ_GPIO[i].gpio_num);
             return FREQ_GPIO[i].gpio_num;
         }
     }
@@ -166,7 +169,7 @@ rmt_channel_t fgen_channel_alloc(size_t mem_blocks)
         rmt_channel_t ch = RMT_CHANNEL_MAX-1-i;
         N = fgen_max_mem_blocks(ch);
         if (FREQ_CHANNEL[ch].state == FGEN_CHANNEL_FREE && mem_blocks <= N) {
-            ESP_LOGD(FGEN_TAG,"Allocation new RMT channel %d", ch);
+            ESP_LOGD(FGEN_TAG,"Allocating new RMT channel %d with %d blocks", ch, mem_blocks);
             FREQ_CHANNEL[ch].state = FGEN_CHANNEL_USED;
             FREQ_CHANNEL[ch].mem_blocks = mem_blocks;
             if (mem_blocks > 1) {
@@ -193,8 +196,8 @@ void fgen_channel_free(rmt_channel_t channel)
 
     if (FREQ_CHANNEL[channel].state == FGEN_CHANNEL_FREE || FREQ_CHANNEL[channel].state == FGEN_CHANNEL_UNAVAILABLE)
         return;
-    ESP_LOGD(FGEN_TAG,"Freeing RMT channel %d", channel);
     mem_blocks = FREQ_CHANNEL[channel].mem_blocks;
+    ESP_LOGD(FGEN_TAG,"Freeing RMT channel %d and its %d blocks", channel, mem_blocks);
     for (rmt_channel_t ch = channel; ch < channel+mem_blocks; ch++) {
         ESP_LOGD(FGEN_TAG,"Also freeing adjacent RMT channel %d", ch);
         FREQ_CHANNEL[ch].state = FGEN_CHANNEL_FREE;
@@ -479,10 +482,11 @@ esp_err_t fgen_allocate(const fgen_info_t* info, gpio_num_t gpio_num, fgen_resou
 
     ret = rmt_driver_install(res->channel, NO_RX_BUFFER, DEFAULT_ALLOC_FLAGS);
     FGEN_CHECK(ret == ESP_OK, "Error installing RMT driver",  ret);
+    ESP_LOGD(FGEN_TAG, "%s: rmt_driver_install() returned ok.", __FUNCTION__ );
 
     ret = rmt_tx_stop(res->channel);
     FGEN_CHECK(ret == ESP_OK, "Error stopping RMT Tx",  ret);
-
+   
     // This is a needed hack for Tx looping since the rmt_config does not do it.
     ret = rmt_set_tx_intr_en(res->channel, false);
     FGEN_CHECK(ret == ESP_OK, "Error disabling RMT Tx interrupt",  ret);
@@ -547,7 +551,7 @@ void fgen_free(fgen_resources_t* res)
 {
     fgen_channel_free(res->channel);
     fgen_gpio_free(res->gpio_num);
-    rmt_driver_uninstall(res->channel);
+    ESP_ERROR_CHECK( rmt_driver_uninstall(res->channel) );
     free(res->items);
     free(res);
 }

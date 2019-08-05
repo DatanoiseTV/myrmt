@@ -333,6 +333,7 @@ static void exec_delete_single(rmt_channel_t channel)
 static int exec_delete(int argc, char **argv)
 {
     extern struct delete_args_s delete_args;
+    rmt_channel_t channel;
 
     int nerrors = arg_parse(argc, argv, (void **) &delete_args);
     if (nerrors != 0) {
@@ -341,9 +342,10 @@ static int exec_delete(int argc, char **argv)
     }
 
     if(delete_args.channel->count) {
-        exec_delete_single(delete_args.channel->ival[0]);
+        channel = delete_args.channel->ival[0];
+        exec_delete_single(channel);
         if(delete_args.nvs->count) {
-            ESP_ERROR_CHECK( freq_nvs_info_erase( delete_args.channel->ival[0]) );
+            ESP_ERROR_CHECK( freq_nvs_info_erase(channel) );
         }
     } else {
         for (rmt_channel_t channel= 0; channel<RMT_CHANNEL_MAX; channel++) {
@@ -691,6 +693,7 @@ static int exec_load(int argc, char **argv)
 { 
     extern struct load_args_s load_args;
     nvs_handle_t    handle;
+    rmt_channel_t channel;
 
     int nerrors = arg_parse(argc, argv, (void **) &load_args);
     if (nerrors != 0) {
@@ -700,8 +703,9 @@ static int exec_load(int argc, char **argv)
     
     ESP_ERROR_CHECK( freq_nvs_begin_transaction(NVS_READONLY, &handle) );
     if (load_args.channel->count == 0) {
-        for (rmt_channel_t ch = 0; ch <  RMT_CHANNEL_MAX; ch++) {
-          exec_load_single(handle, RMT_CHANNEL_MAX-1-ch);
+        for (rmt_channel_t i = 0; i <  RMT_CHANNEL_MAX; i++) {
+            channel = RMT_CHANNEL_MAX - 1 - i;
+            exec_load_single(handle, channel);
         }
     } else {
         rmt_channel_t channel = load_args.channel->ival[0];

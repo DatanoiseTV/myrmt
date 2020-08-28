@@ -514,8 +514,6 @@ esp_err_t fgen_info(double freq, double duty_cycle, fgen_info_t* info)
     info->onitems    = fgen_count_items(info->NH, info->NL);  // without EoTx
     info->mem_blocks = (info->onitems > 0 ) ? 1 + (info->onitems / 64) : 0;
     info->nrep       = (info->mem_blocks * 63) / info->onitems;
-    // This is a hack due to a firmware's bug
-    info->nrep       = (info->nrep == 63) ? 62 : info->nrep;
 
     FGEN_CHECK(info->mem_blocks <= 8, "Fout needs more than 8 RMT channels",  ESP_ERR_INVALID_SIZE);
     ESP_LOGD(FGEN_TAG,"Nitems = %d, Mem Blocks = %d", info->onitems, info->mem_blocks);
